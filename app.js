@@ -1,4 +1,4 @@
-(() => {
+﻿(() => {
   "use strict";
 
   const CITY = "Belo Horizonte";
@@ -1126,10 +1126,13 @@
     }
   }
 
+  window.ParkingBrainState = state;
   window.ParkingBrain = {
+    getState: () => state,
     analyze,
     parseDateTime,
     normalizeParkingName,
     isUsableParking,
   };
 })();
+
