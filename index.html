@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Belo Horizonte Parking Brain</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">JET Ops / Belo Horizonte</div>
+          <h1>Parking Brain</h1>
+        </div>
+        <div class="top-actions">
+          <div class="status-pill" id="statusPill">
+            <span class="status-dot"></span>
+            <span id="statusText">История не загружена</span>
+          </div>
+          <button class="icon-button" id="refreshBtn" type="button" title="Пересчитать">
+            <i data-lucide="refresh-cw"></i>
+          </button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="control-panel">
+          <section class="upload-panel" id="dropZone">
+            <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" multiple hidden>
+            <button class="primary-action" id="uploadBtn" type="button">
+              <i data-lucide="upload"></i>
+              <span>Загрузить аренды</span>
+            </button>
+            <div class="upload-meta">
+              <strong>Belo Horizonte only</strong>
+              <span id="lastUploadText">Файлы еще не добавлены</span>
+            </div>
+          </section>
+
+          <section class="settings-panel">
+            <div class="section-head">
+              <h2>Настройки мозга</h2>
+            </div>
+
+            <label class="range-row">
+              <span>История</span>
+              <strong><span id="lookbackValue">21</span> дн.</strong>
+              <input id="lookbackDays" type="range" min="3" max="60" step="1" value="21">
+            </label>
+
+            <label class="range-row">
+              <span>Заранее</span>
+              <strong><span id="leadValue">45</span> мин.</strong>
+              <input id="leadMinutes" type="range" min="15" max="180" step="15" value="45">
+            </label>
+
+            <label class="range-row">
+              <span>Мин. аренды</span>
+              <strong><span id="minRidesValue">3</span></strong>
+              <input id="minRides" type="range" min="1" max="25" step="1" value="3">
+            </label>
+
+            <label class="range-row">
+              <span>Топ</span>
+              <strong><span id="topLimitValue">24</span></strong>
+              <input id="topLimit" type="range" min="8" max="60" step="1" value="24">
+            </label>
+          </section>
+
+          <section class="tools-panel">
+            <button id="exportHistoryBtn" type="button">
+              <i data-lucide="download"></i>
+              <span>Экспорт истории</span>
+            </button>
+            <button id="importHistoryBtn" type="button">
+              <i data-lucide="file-json"></i>
+              <span>Импорт истории</span>
+            </button>
+            <input id="historyInput" type="file" accept=".json" hidden>
+            <button id="exportCsvBtn" type="button">
+              <i data-lucide="sheet"></i>
+              <span>CSV план</span>
+            </button>
+            <button id="clearBtn" class="danger" type="button">
+              <i data-lucide="trash-2"></i>
+              <span>Очистить</span>
+            </button>
+          </section>
+
+          <section class="history-panel">
+            <div class="section-head">
+              <h2>Загрузки</h2>
+              <span id="uploadCount">0</span>
+            </div>
+            <div class="upload-list" id="uploadList"></div>
+          </section>
+        </aside>
+
+        <section class="workspace">
+          <div class="kpi-grid" id="kpiGrid">
+            <div class="kpi">
+              <span>Аренды BH</span>
+              <strong id="kpiRides">0</strong>
+            </div>
+            <div class="kpi">
+              <span>Парковки</span>
+              <strong id="kpiParkings">0</strong>
+            </div>
+            <div class="kpi">
+              <span>Дней</span>
+              <strong id="kpiDays">0</strong>
+            </div>
+            <div class="kpi accent">
+              <span>Уверенность</span>
+              <strong id="kpiConfidence">0%</strong>
+            </div>
+          </div>
+
+          <section class="panel plan-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Следующие пополнения</h2>
+                <span id="planSubtext">Нет данных для расчета</span>
+              </div>
+              <div class="segmented">
+                <button class="segment active" data-plan-mode="now" type="button">Сейчас</button>
+                <button class="segment" data-plan-mode="day" type="button">День</button>
+              </div>
+            </div>
+            <div class="plan-list" id="planList"></div>
+          </section>
+
+          <section class="content-grid">
+            <div class="panel top-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Топ парковок</h2>
+                  <span id="topSubtext">По историческому спросу</span>
+                </div>
+                <label class="search-box">
+                  <i data-lucide="search"></i>
+                  <input id="searchInput" type="search" placeholder="Поиск">
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Парковка</th>
+                      <th>Поставить</th>
+                      <th>Спрос</th>
+                      <th>Старт/финиш</th>
+                      <th>Сигнал</th>
+                    </tr>
+                  </thead>
+                  <tbody id="topTable"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel insight-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Часы спроса</h2>
+                  <span>Все парковки Belo Horizonte</span>
+                </div>
+              </div>
+              <div class="hour-chart" id="hourChart"></div>
+              <div class="donor-block">
+                <h3>Донорные зоны</h3>
+                <div id="donorList" class="compact-list"></div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <div class="empty-icon"><i data-lucide="brain-circuit"></i></div>
+        <strong>Загрузи ежедневный файл аренды</strong>
+        <span>После импорта появятся парковки, часы и приоритеты для Belo Horizonte.</span>
+      </div>
+    </template>
+  </body>
+</html>
