@@ -8,6 +8,11 @@
   const STORE_UPLOADS = "uploads";
   const STORE_META = "meta";
   const SETTINGS_KEY = "settings";
+  const BH_BOUNDS = { minLat: -20.0231, maxLat: -19.8637, minLng: -44.0366, maxLng: -43.8691 };
+  const PARKING_MATCH_RADIUS_M = 90;
+  const MANAGERS_CATALOG_CSV_URL = "https://docs.google.com/spreadsheets/d/1_N_bOuh-EsrPBOa_MPG3_sWmscYsCthIlanZB49UDMc/gviz/tq?tqx=out:csv&sheet=Belo%20Horizonte";
+  const LOCAL_CATALOG_URL = "./parking_catalog_bh.json";
+  const CATALOG_FETCH_TIMEOUT_MS = 8000;
 
   const defaults = {
     lookbackDays: 21,
@@ -22,6 +27,7 @@
     rides: [],
     uploads: [],
     settings: { ...defaults },
+    catalogPoints: [],
     analysis: null,
     search: "",
   };
@@ -50,11 +56,17 @@
     bindEvents();
     setStatus("warn", "Загрузка истории");
     try {
+      const catalogPromise = loadManagersParkingCatalog().catch((err) => {
+        console.warn("Managers Map catalog load failed", err);
+        return [];
+      });
       state.db = await openDatabase();
       await loadState();
+      state.catalogPoints = await catalogPromise;
       renderSettings();
       recompute();
-      setStatus(state.rides.length ? "ok" : "warn", state.rides.length ? "Мозг готов" : "История пустая");
+      const catalogText = state.catalogPoints.length ? ` · ${state.catalogPoints.length} парковок` : "";
+      setStatus(state.rides.length ? "ok" : "warn", `${state.rides.length ? "Мозг готов" : "История пустая"}${catalogText}`);
     } catch (err) {
       console.error(err);
       setStatus("bad", "Ошибка базы");
@@ -300,8 +312,9 @@
 
     rows.forEach((row, rowIndex) => {
       const normalized = normalizeRow(row);
-      const city = cleanText(normalized["Город"]);
-      if (!sameCity(city)) return;
+      const city = cleanText(normalized["\u0413\u043e\u0440\u043e\u0434"]);
+      const gpsReport = isGpsReportRow(normalized);
+      if (!sameCity(city) && !gpsReport) return;
       cityRows += 1;
 
       const ride = extractRide(normalized, file.name, rowIndex + 2);
@@ -347,7 +360,272 @@
     return out;
   }
 
+
+  function isGpsReportRow(row) {
+    const start = coordsFromLatLng(row["Start_Latitude"], row["Start_Longitude"]);
+    const end = coordsFromLatLng(row["End_Latitude"], row["End_Longitude"]);
+    return Boolean(row["OrderId"] && row["QR"] && row["\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043c\u044f \u0441\u0442\u0430\u0440\u0442\u0430"] && start && end && (pointInBh(start) || pointInBh(end)));
+  }
+
+  function extractGpsReportRide(row, fileName, rowNumber) {
+    const startCoords = coordsFromLatLng(row["Start_Latitude"], row["Start_Longitude"]);
+    const endCoords = coordsFromLatLng(row["End_Latitude"], row["End_Longitude"]);
+    if (!startCoords || !endCoords || (!pointInBh(startCoords) && !pointInBh(endCoords))) return null;
+
+    const startAt = parseReportDateTime(row["\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043c\u044f \u0441\u0442\u0430\u0440\u0442\u0430"]);
+    if (!startAt) return null;
+    const endAt = parseReportDateTime(row["\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043c\u044f \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f"]);
+    const scooter = cleanText(row["QR"]);
+    const idRaw = cleanText(row["OrderId"]);
+    const fallbackId = hashText(`${fileName}|${rowNumber}|${startAt.getTime()}|${scooter}|${startCoords.lat}|${startCoords.lng}`);
+    const parkingName = fallbackGpsName(startCoords);
+    const endName = fallbackGpsName(endCoords);
+
+    return {
+      id: idRaw || `gps-${fallbackId}`,
+      city: CITY,
+      fileName,
+      rowNumber,
+      sourceType: "gps-report",
+      needsNameResolution: true,
+      ts: startAt.getTime(),
+      dateKey: toDateKey(startAt),
+      weekday: startAt.getDay(),
+      hour: startAt.getHours(),
+      parkingName,
+      parkingKey: normalizeSearch(parkingName),
+      endName,
+      endKey: normalizeSearch(endName),
+      isParkingSignal: true,
+      scooter,
+      qr: scooter,
+      tariff: "GPS report",
+      durationSec: toNumber(row["\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u0432 \u043c\u0438\u043d\u0443\u0442\u0430\u0445"]) * 60,
+      distanceM: toNumber(row["\u0414\u0438\u0441\u0442\u0430\u043d\u0446\u0438\u044f"]) * 1000,
+      revenue: 0,
+      startLat: startCoords.lat,
+      startLng: startCoords.lng,
+      endLat: endCoords.lat,
+      endLng: endCoords.lng,
+      endTs: endAt ? endAt.getTime() : null,
+    };
+  }
+
+  function coordsFromLatLng(latValue, lngValue) {
+    const lat = toNumber(latValue);
+    const lng = toNumber(lngValue);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+    return { lat, lng };
+  }
+
+  function pointInBh(point) {
+    return Boolean(point
+      && point.lat >= BH_BOUNDS.minLat && point.lat <= BH_BOUNDS.maxLat
+      && point.lng >= BH_BOUNDS.minLng && point.lng <= BH_BOUNDS.maxLng);
+  }
+
+  function fallbackGpsName(point) {
+    return `GPS ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`;
+  }
+
+  function parseReportDateTime(value) {
+    const text = cleanText(value);
+    if (!text) return null;
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (match) {
+      const utcHour = Number(match[4]) - 6; // report is +03:00; Belo Horizonte is UTC-3.
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), utcHour, Number(match[5]), Number(match[6] || 0), 0);
+    }
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  }
+
+  async function loadManagersParkingCatalog() {
+    const live = await loadCatalogFromCsvUrl(MANAGERS_CATALOG_CSV_URL).catch((err) => {
+      console.warn("Managers Map CSV unavailable", err);
+      return [];
+    });
+    if (live.length) return live;
+
+    return loadCatalogFromJsonUrl(LOCAL_CATALOG_URL).catch((err) => {
+      console.warn("Local parking catalog unavailable", err);
+      return [];
+    });
+  }
+
+  async function loadCatalogFromCsvUrl(url) {
+    const text = await fetchTextWithTimeout(url, CATALOG_FETCH_TIMEOUT_MS);
+    return normalizeCatalogRows(parseCsvRows(text));
+  }
+
+  async function loadCatalogFromJsonUrl(url) {
+    const text = await fetchTextWithTimeout(url, CATALOG_FETCH_TIMEOUT_MS);
+    const data = JSON.parse(text);
+    return normalizeCatalogRows(Array.isArray(data) ? data : data.parkings || []);
+  }
+
+  async function fetchTextWithTimeout(url, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function normalizeCatalogRows(rows) {
+    const byPoint = new Map();
+    rows.forEach((row) => {
+      const name = cleanText(row.hotspot_name || row.name || row.parkingName || row.title);
+      const lat = toNumber(row.lat ?? row.latitude);
+      const lng = toNumber(row.lon ?? row.lng ?? row.longitude);
+      const point = { lat, lng };
+      if (!isUsableParking(name) || !pointInBh(point)) return;
+
+      const catalogPoint = {
+        name,
+        key: normalizeSearch(name),
+        lat,
+        lng,
+        pins: toNumber(row.pins),
+        starts: toNumber(row.starts),
+        delta: toNumber(row.delta),
+        dayType: cleanText(row.day_type || row.dayType),
+        method: cleanText(row.match_method || row.method),
+        source: cleanText(row.source) || "managers-map",
+      };
+      const id = `${catalogPoint.key}|${lat.toFixed(6)}|${lng.toFixed(6)}`;
+      const current = byPoint.get(id);
+      if (!current || catalogPoint.pins > current.pins) byPoint.set(id, catalogPoint);
+    });
+    return [...byPoint.values()];
+  }
+
+  function parseCsvRows(text) {
+    const matrix = [];
+    let row = [];
+    let cell = "";
+    let quoted = false;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      if (quoted) {
+        if (char === '"' && text[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else if (char === '"') {
+          quoted = false;
+        } else {
+          cell += char;
+        }
+      } else if (char === '"') {
+        quoted = true;
+      } else if (char === ",") {
+        row.push(cell);
+        cell = "";
+      } else if (char === "\n") {
+        row.push(cell);
+        matrix.push(row);
+        row = [];
+        cell = "";
+      } else if (char !== "\r") {
+        cell += char;
+      }
+    }
+
+    if (cell || row.length) {
+      row.push(cell);
+      matrix.push(row);
+    }
+
+    const headers = (matrix.shift() || []).map((header) => cleanText(header));
+    return matrix
+      .filter((items) => items.some((item) => cleanText(item)))
+      .map((items) => {
+        const out = {};
+        headers.forEach((header, index) => {
+          out[header] = items[index] ?? "";
+        });
+        return out;
+      });
+  }
+  function buildParkingResolver(rides) {
+    const points = [];
+    const seen = new Set();
+    const addPoint = (name, lat, lng) => {
+      if (lat == null || lng == null) return;
+      if (!isUsableParking(name)) return;
+      const key = normalizeSearch(name);
+      const pointKey = `${key}|${Number(lat).toFixed(5)}|${Number(lng).toFixed(5)}`;
+      if (seen.has(pointKey)) return;
+      seen.add(pointKey);
+      points.push({ name, key, lat: Number(lat), lng: Number(lng) });
+    };
+
+    (state.catalogPoints || []).forEach((point) => {
+      addPoint(point.name, point.lat, point.lng);
+    });
+
+    rides.forEach((ride) => {
+      if (!ride || ride.needsNameResolution) return;
+      addPoint(ride.parkingName, ride.startLat, ride.startLng);
+      addPoint(ride.endName, ride.endLat, ride.endLng);
+    });
+    return points;
+  }
+  function resolveRideParking(ride, resolver) {
+    if (!ride || !ride.needsNameResolution || ride.startLat == null || ride.startLng == null || !resolver.length) return ride;
+    const nearest = nearestParkingPoint(Number(ride.startLat), Number(ride.startLng), resolver);
+    if (!nearest) return ride;
+    return {
+      ...ride,
+      parkingName: nearest.name,
+      parkingKey: nearest.key,
+      resolvedParkingName: nearest.name,
+      resolvedDistanceM: Math.round(nearest.distanceM),
+    };
+  }
+
+  function resolveRideEndParking(ride, resolver) {
+    if (!ride || !ride.needsNameResolution || ride.endLat == null || ride.endLng == null || !resolver.length) return ride;
+    const nearest = nearestParkingPoint(Number(ride.endLat), Number(ride.endLng), resolver);
+    if (!nearest) return ride;
+    return {
+      ...ride,
+      endName: nearest.name,
+      endKey: nearest.key,
+      resolvedEndName: nearest.name,
+      resolvedEndDistanceM: Math.round(nearest.distanceM),
+    };
+  }
+
+  function haversineMeters(lat1, lng1, lat2, lng2) {
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLng = (lng2 - lng1) * rad;
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+    return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  function nearestParkingPoint(lat, lng, resolver) {
+    let best = null;
+    let bestDistance = Infinity;
+    resolver.forEach((point) => {
+      const distance = haversineMeters(lat, lng, point.lat, point.lng);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = point;
+      }
+    });
+    return best && bestDistance <= PARKING_MATCH_RADIUS_M ? { ...best, distanceM: bestDistance } : null;
+  }
+
   function extractRide(row, fileName, rowNumber) {
+    if (isGpsReportRow(row)) return extractGpsReportRide(row, fileName, rowNumber);
     const startNameRaw = firstValue(row, [
       "Название паверстанции начала",
       "Зона начала аренды",
@@ -410,7 +688,10 @@
     const latestTs = usable.reduce((max, ride) => Math.max(max, ride.ts || 0), 0);
     const latestDate = latestTs ? new Date(latestTs) : null;
     const cutoffTs = latestTs - settings.lookbackDays * 86400000;
-    const recent = usable.filter((ride) => ride.ts >= cutoffTs);
+    const resolver = buildParkingResolver(usable);
+    const recent = usable
+      .filter((ride) => ride.ts >= cutoffTs)
+      .map((ride) => resolveRideEndParking(resolveRideParking(ride, resolver), resolver));
 
     const hourTotals = Array.from({ length: 24 }, () => 0);
     const parkingMap = new Map();
@@ -1135,4 +1416,14 @@
     isUsableParking,
   };
 })();
+
+
+
+
+
+
+
+
+
+
 
