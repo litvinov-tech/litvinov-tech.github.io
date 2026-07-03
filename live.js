@@ -173,19 +173,20 @@
     const liveByKey = new Map(state.parkings.map((p) => [p.key, p]));
     const rows = (analysis?.stations || []).map((s) => {
       const live = liveByKey.get(norm(s.name)) || nearestParking(s);
-      const monitor = !!live?.monitor;
+      const monitor = live ? !!live.monitor : s.monitor === true;
+      const monitorKnown = !!live || typeof s.monitor === "boolean";
       const reasonScore = (s.last24 || 0) * 3 + (s.last7d || 0) + Math.max(0, s.net || 0) * 2 + (s.peakDemand || 0) * 2 + (s.starts || 0) * 0.25;
-      return { s, live, monitor, reasonScore };
+      return { s, live, monitor, monitorKnown, reasonScore };
     }).filter((x) => !x.monitor && (x.s.starts || 0) >= 3).sort((a, b) => b.reasonScore - a.reasonScore).slice(0, 10);
 
     if (!rows.length) {
       el.innerHTML = `<div class="compact-item"><strong>Кандидаты появятся после Excel</strong><span>Загрузки аренды достаточно даже без live API. Если live загрузится, monitor/non-monitor будет точнее.</span></div>`;
       return;
     }
-    el.innerHTML = rows.map(({ s, live }, idx) => `
+    el.innerHTML = rows.map(({ s, live, monitorKnown }, idx) => `
       <div class="compact-item">
         <strong>${idx + 1}. ${esc(s.name)}</strong>
-        <span>Добавить в monitor: стартов ${s.starts}, 24ч ${s.last24}, 7д ${s.last7d}, net ${signed(s.net)} · ${live ? "live non-monitor" : "monitor status unknown"}</span>
+        <span>Добавить в monitor: стартов ${s.starts}, 24ч ${s.last24}, 7д ${s.last7d}, net ${signed(s.net)} · ${live ? "live non-monitor" : monitorKnown ? "catalog non-monitor" : "monitor status unknown"}</span>
       </div>
     `).join("");
   }
@@ -295,6 +296,3 @@
   function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   function hav(lat1, lng1, lat2, lng2) { const r = Math.PI / 180, dLat = (lat2 - lat1) * r, dLng = (lng2 - lng1) * r; const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLng / 2) ** 2; return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); }
 })();
-
-
-

@@ -10,6 +10,10 @@
   const SETTINGS_KEY = "settings";
   const BH_BOUNDS = { minLat: -20.0231, maxLat: -19.8637, minLng: -44.0366, maxLng: -43.8691 };
   const PARKING_MATCH_RADIUS_M = 90;
+  const RESOLVER_CELL_DEG = 0.001;
+  const RESOLVER_CELL_RANGE = 2;
+  const RIDE_WRITE_CHUNK_SIZE = 4000;
+  const DEFAULT_WRITE_CHUNK_SIZE = 500;
   const MANAGERS_CATALOG_CSV_URL = "https://docs.google.com/spreadsheets/d/1_N_bOuh-EsrPBOa_MPG3_sWmscYsCthIlanZB49UDMc/gviz/tq?tqx=out:csv&sheet=Belo%20Horizonte";
   const LOCAL_CATALOG_URL = "./parking_catalog_bh.json";
   const CATALOG_FETCH_TIMEOUT_MS = 8000;
@@ -48,6 +52,7 @@
   ]);
 
   const els = {};
+  let saveQueue = Promise.resolve();
 
   document.addEventListener("DOMContentLoaded", boot);
 
@@ -206,18 +211,31 @@
     });
   }
 
-  function putMany(storeName, items) {
-    return new Promise((resolve, reject) => {
-      if (!items.length) {
-        resolve();
-        return;
+  async function putMany(storeName, items) {
+    if (!items.length) return;
+    const chunkSize = storeName === STORE_RIDES ? RIDE_WRITE_CHUNK_SIZE : DEFAULT_WRITE_CHUNK_SIZE;
+    for (let index = 0; index < items.length; index += chunkSize) {
+      const chunk = items.slice(index, index + chunkSize);
+      await putManyChunk(storeName, chunk);
+      if (storeName === STORE_RIDES && items.length > chunkSize) {
+        setStatus("warn", `\u0421\u043e\u0445\u0440\u0430\u043d\u044f\u044e ${fmtInt(Math.min(index + chunk.length, items.length))}/${fmtInt(items.length)}`);
       }
+      await yieldToBrowser();
+    }
+  }
+
+  function putManyChunk(storeName, items) {
+    return new Promise((resolve, reject) => {
       const transaction = state.db.transaction(storeName, "readwrite");
       const store = transaction.objectStore(storeName);
       items.forEach((item) => store.put(item));
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
     });
+  }
+
+  function yieldToBrowser() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   function clearStore(storeName) {
@@ -285,15 +303,29 @@
     }
 
     if (allNew.length || uploadRows.length) {
-      await putMany(STORE_RIDES, allNew);
-      await putMany(STORE_UPLOADS, uploadRows);
       state.rides.push(...allNew);
       state.uploads = [...uploadRows, ...state.uploads].sort((a, b) => b.importedAt - a.importedAt);
       recompute();
-      setStatus("ok", `Добавлено ${allNew.length}`);
+      setStatus("warn", `\u041f\u043e\u043a\u0430\u0437\u0430\u043d\u043e ${fmtInt(allNew.length)} \u00b7 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u044e \u0438\u0441\u0442\u043e\u0440\u0438\u044e`);
+      void saveImportedRows(allNew, uploadRows);
     } else {
       setStatus(state.rides.length ? "ok" : "warn", state.rides.length ? "Мозг готов" : "История пустая");
     }
+  }
+
+  function saveImportedRows(rides, uploads) {
+    saveQueue = saveQueue.then(async () => {
+      try {
+        await putMany(STORE_RIDES, rides);
+        await putMany(STORE_UPLOADS, uploads);
+        setStatus("ok", `\u0414\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043e ${fmtInt(rides.length)}`);
+      } catch (err) {
+        console.error(err);
+        toast(`\u041d\u0435 \u0441\u043c\u043e\u0433 \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438\u0441\u0442\u043e\u0440\u0438\u044e: ${err.message}`, true);
+        setStatus("bad", "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f");
+      }
+    });
+    return saveQueue;
   }
 
   async function parseRentalFile(file, existingIds) {
@@ -442,14 +474,14 @@
   }
 
   async function loadManagersParkingCatalog() {
-    const live = await loadCatalogFromCsvUrl(MANAGERS_CATALOG_CSV_URL).catch((err) => {
-      console.warn("Managers Map CSV unavailable", err);
+    const exact = await loadCatalogFromJsonUrl(LOCAL_CATALOG_URL).catch((err) => {
+      console.warn("Local parking catalog unavailable", err);
       return [];
     });
-    if (live.length) return live;
+    if (exact.length) return exact;
 
-    return loadCatalogFromJsonUrl(LOCAL_CATALOG_URL).catch((err) => {
-      console.warn("Local parking catalog unavailable", err);
+    return loadCatalogFromCsvUrl(MANAGERS_CATALOG_CSV_URL).catch((err) => {
+      console.warn("Managers Map CSV unavailable", err);
       return [];
     });
   }
@@ -462,7 +494,7 @@
   async function loadCatalogFromJsonUrl(url) {
     const text = await fetchTextWithTimeout(url, CATALOG_FETCH_TIMEOUT_MS);
     const data = JSON.parse(text);
-    return normalizeCatalogRows(Array.isArray(data) ? data : data.parkings || []);
+    return normalizeCatalogRows(Array.isArray(data) ? data : data.parkings || data.entries || []);
   }
 
   async function fetchTextWithTimeout(url, timeoutMs) {
@@ -487,10 +519,18 @@
       if (!isUsableParking(name) || !pointInBh(point)) return;
 
       const catalogPoint = {
+        id: cleanText(row.id),
         name,
         key: normalizeSearch(name),
         lat,
         lng,
+        radius: toNumber(row.radius),
+        customRadius: toNumber(row.customRadius ?? row.custom_radius),
+        monitor: typeof row.monitor === "boolean" ? row.monitor : null,
+        bikesCount: toNumber(row.bikesCount ?? row.bikes_count),
+        expectedBikesCount: toNumber(row.expectedBikesCount ?? row.expected_bikes_count),
+        targetBikesCount: toNumber(row.targetBikesCount ?? row.target_bikes_count),
+        capacity: row.capacity ?? null,
         pins: toNumber(row.pins),
         starts: toNumber(row.starts),
         delta: toNumber(row.delta),
@@ -498,9 +538,11 @@
         method: cleanText(row.match_method || row.method),
         source: cleanText(row.source) || "managers-map",
       };
-      const id = `${catalogPoint.key}|${lat.toFixed(6)}|${lng.toFixed(6)}`;
+      const id = catalogPoint.id || `${catalogPoint.key}|${lat.toFixed(6)}|${lng.toFixed(6)}`;
       const current = byPoint.get(id);
-      if (!current || catalogPoint.pins > current.pins) byPoint.set(id, catalogPoint);
+      const currentWeight = current ? (current.pins || current.bikesCount || 0) : -1;
+      const nextWeight = catalogPoint.pins || catalogPoint.bikesCount || 0;
+      if (!current || nextWeight >= currentWeight) byPoint.set(id, catalogPoint);
     });
     return [...byPoint.values()];
   }
@@ -556,18 +598,18 @@
   function buildParkingResolver(rides) {
     const points = [];
     const seen = new Set();
-    const addPoint = (name, lat, lng) => {
+    const addPoint = (name, lat, lng, extra = {}) => {
       if (lat == null || lng == null) return;
       if (!isUsableParking(name)) return;
       const key = normalizeSearch(name);
-      const pointKey = `${key}|${Number(lat).toFixed(5)}|${Number(lng).toFixed(5)}`;
+      const pointKey = `${extra.id || key}|${Number(lat).toFixed(5)}|${Number(lng).toFixed(5)}`;
       if (seen.has(pointKey)) return;
       seen.add(pointKey);
-      points.push({ name, key, lat: Number(lat), lng: Number(lng) });
+      points.push({ name, key, lat: Number(lat), lng: Number(lng), ...extra });
     };
 
     (state.catalogPoints || []).forEach((point) => {
-      addPoint(point.name, point.lat, point.lng);
+      addPoint(point.name, point.lat, point.lng, point);
     });
 
     rides.forEach((ride) => {
@@ -575,8 +617,27 @@
       addPoint(ride.parkingName, ride.startLat, ride.startLng);
       addPoint(ride.endName, ride.endLat, ride.endLng);
     });
-    return points;
+    return buildResolverIndex(points);
   }
+
+  function buildResolverIndex(points) {
+    const grid = new Map();
+    points.forEach((point) => {
+      const gx = Math.floor(point.lat / RESOLVER_CELL_DEG);
+      const gy = Math.floor(point.lng / RESOLVER_CELL_DEG);
+      const cellKey = `${gx}|${gy}`;
+      if (!grid.has(cellKey)) grid.set(cellKey, []);
+      grid.get(cellKey).push(point);
+    });
+    return {
+      points,
+      grid,
+      length: points.length,
+      cellDeg: RESOLVER_CELL_DEG,
+      cache: new Map(),
+    };
+  }
+
   function resolveRideParking(ride, resolver) {
     if (!ride || !ride.needsNameResolution || ride.startLat == null || ride.startLng == null || !resolver.length) return ride;
     const nearest = nearestParkingPoint(Number(ride.startLat), Number(ride.startLng), resolver);
@@ -587,6 +648,8 @@
       parkingKey: nearest.key,
       resolvedParkingName: nearest.name,
       resolvedDistanceM: Math.round(nearest.distanceM),
+      catalogId: nearest.id || null,
+      monitor: typeof nearest.monitor === "boolean" ? nearest.monitor : null,
     };
   }
 
@@ -600,6 +663,7 @@
       endKey: nearest.key,
       resolvedEndName: nearest.name,
       resolvedEndDistanceM: Math.round(nearest.distanceM),
+      endCatalogId: nearest.id || null,
     };
   }
 
@@ -612,16 +676,37 @@
     return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
   function nearestParkingPoint(lat, lng, resolver) {
+    const points = Array.isArray(resolver) ? resolver : resolver?.points || [];
+    if (!points.length) return null;
+    const cacheKey = !Array.isArray(resolver) && resolver.cache ? `${lat.toFixed(5)}|${lng.toFixed(5)}` : "";
+    if (cacheKey && resolver.cache.has(cacheKey)) return resolver.cache.get(cacheKey);
+    const candidates = resolverCandidates(lat, lng, resolver);
     let best = null;
     let bestDistance = Infinity;
-    resolver.forEach((point) => {
+    candidates.forEach((point) => {
       const distance = haversineMeters(lat, lng, point.lat, point.lng);
       if (distance < bestDistance) {
         bestDistance = distance;
         best = point;
       }
     });
-    return best && bestDistance <= PARKING_MATCH_RADIUS_M ? { ...best, distanceM: bestDistance } : null;
+    const result = best && bestDistance <= PARKING_MATCH_RADIUS_M ? { ...best, distanceM: bestDistance } : null;
+    if (cacheKey) resolver.cache.set(cacheKey, result);
+    return result;
+  }
+
+  function resolverCandidates(lat, lng, resolver) {
+    if (Array.isArray(resolver) || !resolver?.grid) return Array.isArray(resolver) ? resolver : resolver?.points || [];
+    const gx = Math.floor(lat / resolver.cellDeg);
+    const gy = Math.floor(lng / resolver.cellDeg);
+    const candidates = [];
+    for (let dx = -RESOLVER_CELL_RANGE; dx <= RESOLVER_CELL_RANGE; dx += 1) {
+      for (let dy = -RESOLVER_CELL_RANGE; dy <= RESOLVER_CELL_RANGE; dy += 1) {
+        const cell = resolver.grid.get(`${gx + dx}|${gy + dy}`);
+        if (cell) candidates.push(...cell);
+      }
+    }
+    return candidates;
   }
 
   function extractRide(row, fileName, rowNumber) {
@@ -774,6 +859,8 @@
         days: new Set(),
         lat: null,
         lng: null,
+        catalogId: null,
+        monitor: null,
       });
     }
     const station = map.get(key);
@@ -788,6 +875,8 @@
     station.durationSec += ride.durationSec || 0;
     station.distanceM += ride.distanceM || 0;
     station.days.add(ride.dateKey);
+    if (ride.catalogId) station.catalogId = ride.catalogId;
+    if (typeof ride.monitor === "boolean") station.monitor = ride.monitor;
     if (latestTs - ride.ts <= 86400000) station.last24 += 1;
     if (latestTs - ride.ts <= 7 * 86400000) station.last7d += 1;
     if (station.lat == null && ride.startLat != null && ride.startLng != null) {
@@ -1416,14 +1505,3 @@
     isUsableParking,
   };
 })();
-
-
-
-
-
-
-
-
-
-
-
