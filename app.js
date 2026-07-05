@@ -1679,6 +1679,37 @@
     return CAPACITY_SCHEDULE_IDS_BY_CITY[city?.key || ""]?.[schedule] || "";
   }
 
+  function isKnownForeignScheduleId(city, scheduleId) {
+    const id = cleanText(scheduleId);
+    const cityKey = city?.key || "";
+    if (!id) return false;
+    return Object.entries(CAPACITY_SCHEDULE_IDS_BY_CITY).some(([key, ids]) => (
+      key !== cityKey && Object.values(ids || {}).some((value) => cleanText(value) === id)
+    ));
+  }
+
+  function isValidScheduleIdForCity(city, scheduleId) {
+    const id = cleanText(scheduleId);
+    if (!id) return false;
+    if (isKnownForeignScheduleId(city, id)) return false;
+    return true;
+  }
+
+  function collectScheduleIdsForOutputCity(records, indices, selectedCity) {
+    const out = new Map();
+    (records || []).forEach((record) => {
+      const cells = record.cells || [];
+      const rowCityName = indices.cityName >= 0 ? cellAt(cells, indices.cityName) : "";
+      const rowCityId = indices.cityId >= 0 ? cellAt(cells, indices.cityId) : "";
+      if (rowCityName && !sameCity(rowCityName, selectedCity.name)) return;
+      if (rowCityId && selectedCity.id && rowCityId !== selectedCity.id) return;
+      const schedule = normalizeCapacitySchedule(cellAt(cells, indices.scheduleName));
+      const scheduleId = cleanText(cellAt(cells, indices.scheduleId));
+      if (schedule && isValidScheduleIdForCity(selectedCity, scheduleId)) out.set(schedule, scheduleId);
+    });
+    return out;
+  }
+
   function appsScriptCityName(city) {
     return city?.name || CITY;
   }
@@ -2986,7 +3017,7 @@
         if (rowCityId && selectedCity.id && rowCityId !== selectedCity.id) return false;
         return true;
       });
-    const scheduleIds = new Map();
+    const scheduleIds = collectScheduleIdsForOutputCity(outputRecords, indices, selectedCity);
     const byParkingSchedule = new Map();
     const parkingDirectory = new Map();
 
@@ -3000,7 +3031,7 @@
       const sameOutputCity = !rowCityName || sameCity(rowCityName, selectedCity.name);
       if (!defaultCityId && sameOutputCity && indices.cityId >= 0) defaultCityId = cellAt(cells, indices.cityId);
       if (!defaultCityName && sameOutputCity && rowCityName) defaultCityName = rowCityName;
-      if (schedule && scheduleId) scheduleIds.set(schedule, scheduleId);
+      if (schedule && isValidScheduleIdForCity(selectedCity, scheduleId)) scheduleIds.set(schedule, scheduleId);
       const parkingKey = parkingId || capacityNameKey(parkingName);
       if (parkingKey && schedule) byParkingSchedule.set(`${parkingKey}|${schedule}`, index);
       if (parkingKey && !parkingDirectory.has(parkingKey)) {
@@ -3038,6 +3069,10 @@
     targets.forEach((target) => {
       if (!target.capacity || target.capacity < 4) return;
       const scheduleId = scheduleIds.get(target.schedule) || capacityScheduleId(selectedCity, target.schedule) || "";
+      if (!scheduleId) {
+        skipped.push({ name: target.row.name, schedule: target.schedule, reason: "schedule_id missing for selected city; load correct Monitor CSV/rules" });
+        return;
+      }
       const resolveKey = target.row.key || capacityNameKey(target.row.name);
       let resolved = resolvedParkingCache.get(resolveKey);
       if (!resolvedParkingCache.has(resolveKey)) {
@@ -3112,7 +3147,10 @@
       const cells = record.cells;
       const schedule = normalizeCapacitySchedule(cellAt(cells, indices.scheduleName));
       const parkingName = cellAt(cells, indices.parkingName);
+      const currentScheduleId = cellAt(cells, indices.scheduleId);
+      if (isKnownForeignScheduleId(selectedCity, currentScheduleId)) setCell(cells, indices.scheduleId, "");
       if (schedule && !cellAt(cells, indices.scheduleId)) setCell(cells, indices.scheduleId, capacityScheduleId(selectedCity, schedule));
+      if (schedule && !cellAt(cells, indices.scheduleId)) skipped.push({ name: parkingName || "unknown", schedule, reason: "schedule_id missing for selected city" });
 
       const capacityValue = Number(cellAt(cells, indices.capacity));
       if (Number.isFinite(capacityValue) && capacityValue > 0 && capacityValue < 4) setCell(cells, indices.capacity, 4);
@@ -3133,8 +3171,28 @@
         }
       }
 
-      if (!cellAt(cells, indices.parkingId)) {
-        skipped.push({ name: parkingName || "unknown", schedule, reason: "parking_id missing; kept by rental parking name" });
+      const finalParkingName = cellAt(cells, indices.parkingName);
+      const finalParkingId = cellAt(cells, indices.parkingId);
+      const finalScheduleId = cellAt(cells, indices.scheduleId);
+      const finalLat = toNumber(cellAt(cells, indices.lat));
+      const finalLng = toNumber(cellAt(cells, indices.lng));
+      const completeCoords = Number.isFinite(finalLat) && Number.isFinite(finalLng) && Math.abs(finalLat) > 0.000001 && Math.abs(finalLng) > 0.000001;
+
+      if (!finalParkingName || !isUsableParking(finalParkingName) || sameCity(finalParkingName, selectedCity.name)) {
+        skipped.push({ name: finalParkingName || parkingName || "unknown", schedule, reason: "parking_name invalid or equals city name" });
+        return;
+      }
+      if (!finalScheduleId) {
+        skipped.push({ name: finalParkingName, schedule, reason: "schedule_id missing for selected city" });
+        return;
+      }
+      if (!finalParkingId) {
+        skipped.push({ name: finalParkingName, schedule, reason: "parking_id missing" });
+        return;
+      }
+      if (!completeCoords) {
+        skipped.push({ name: finalParkingName, schedule, reason: "coordinates missing" });
+        return;
       }
       finalized.push(record);
     });
