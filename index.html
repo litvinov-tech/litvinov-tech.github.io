@@ -3,22 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Belo Horizonte Parking Brain</title>
+    <title>JET Capacity Brain</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="./styles.css">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./live.js?v=20260705-4" defer></script>
-    <script src="./app.js?v=20260705-4" defer></script>
+    <script src="./app.js?v=20260705-6" defer></script>
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div>
           <div class="eyebrow">JET Ops / Belo Horizonte</div>
-          <h1>Parking Brain</h1>
+          <h1>JET Capacity Brain</h1>
         </div>
         <div class="top-actions">
           <div class="status-pill" id="statusPill">
@@ -105,7 +102,7 @@
         </aside>
 
         <section class="workspace">
-          <div class="kpi-grid" id="kpiGrid">
+          <div class="kpi-grid legacy-brain" id="kpiGrid">
             <div class="kpi">
               <span>Аренды BH</span>
               <strong id="kpiRides">0</strong>
@@ -124,7 +121,7 @@
             </div>
           </div>
 
-          <section class="panel plan-panel">
+          <section class="panel plan-panel legacy-brain">
             <div class="panel-head">
               <div>
                 <h2>Следующие пополнения</h2>
@@ -257,7 +254,7 @@
               </div>
             </div>
           </section>
-          <section class="content-grid">
+          <section class="content-grid legacy-brain">
             <div class="panel top-panel">
               <div class="panel-head">
                 <div>
