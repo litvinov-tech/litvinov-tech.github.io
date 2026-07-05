@@ -1505,6 +1505,20 @@
     return data;
   }
 
+  const CAPACITY_SCHEDULE_IDS_BY_CITY = {
+    "belo-horizonte": {
+      [CAPACITY_DAY_SCHEDULE]: "d1369e80-d2d3-4f95-8972-b790faec6a57",
+      [CAPACITY_EVENING_SCHEDULE]: "08aff426-c04a-46b7-9505-4434a19c3387",
+      [CAPACITY_FRIDAY_DAY_SCHEDULE]: "9b4f3567-db4d-432c-a6c6-3a57f1aac5b7",
+      [CAPACITY_FRIDAY_EVENING_SCHEDULE]: "5ae37917-ef6d-40ca-8f87-3482ede360e4",
+      [CAPACITY_WEEKEND_SCHEDULE]: "8b35b8e3-0a76-4066-acaa-3aed47ea6fdf",
+    },
+  };
+
+  function capacityScheduleId(city, schedule) {
+    return CAPACITY_SCHEDULE_IDS_BY_CITY[city?.key || ""]?.[schedule] || "";
+  }
+
   function appsScriptCityName(city) {
     return city?.name || CITY;
   }
@@ -1562,22 +1576,30 @@
   }
 
   function parseMonitorCapacityRows(rows, sourceName) {
-    const headersRaw = [];
-    (rows || []).forEach((row) => {
-      Object.keys(row || {}).forEach((key) => {
-        if (!headersRaw.includes(key)) headersRaw.push(key);
-      });
-    });
-    if (!headersRaw.length) headersRaw.push("nome", "bloco", "capacidade", "lat", "lng");
+    const city = selectedCapacityCity();
+    const headersRaw = ["city_id", "city_name", "schedule_id", "schedule_name", "parking_id", "parking_name", "parking_latitude", "parking_longitude", "capacity"];
     const headers = headersRaw.map(headerKey);
-    const records = (rows || []).map((row) => ({
+    const catalogItems = buildCatalogCapacityItems();
+    const normalized = normalizeMonitorCapacityRows(rows || [])
+      .map((row) => enrichCapacityParkingWithCatalog(row, catalogItems));
+    if (!normalized.length) throw new Error(`${sourceName}: nao encontrei nome/bloco/capacidade`);
+    const records = normalized.map((row) => ({
       row,
-      cells: headersRaw.map((header) => row?.[header] ?? ""),
+      cells: [
+        city.id || "",
+        city.name || CITY,
+        capacityScheduleId(city, row.schedule),
+        row.schedule,
+        row.id || "",
+        row.name,
+        validCoordinatePair(row) ? row.lat : "",
+        validCoordinatePair(row) ? row.lng : "",
+        row.capacity,
+      ],
       headersRaw,
       headers,
     }));
-    const normalized = normalizeMonitorCapacityRows(rows || []);
-    if (!normalized.length) throw new Error(`${sourceName}: nao encontrei nome/bloco/capacidade`);
+    normalized.forEach((row, index) => { row.sourceRecord = records[index]; });
     return { delimiter: ";", headersRaw, headers, records, rows: normalized };
   }
 
@@ -1641,12 +1663,14 @@
     }
 
     try {
-      const normalized = normalizeCapacityParkings(rows);
+      let normalized = normalizeCapacityParkings(rows);
       if (!normalized.length) throw new Error("all parkings list is empty after parsing");
+      normalized = enrichCapacityParkingsWithCatalog(normalized);
       state.capacity.allParkings = normalized;
       state.capacity.allParkingsSource = source;
       saveCachedAllParkings(city, normalized, source);
-      if (city.name === CITY && state.capacity.allParkings.length) state.catalogPoints = state.capacity.allParkings;
+      const hasParkingIds = normalized.some((point) => point.id);
+      if (city.name === CITY && state.capacity.allParkings.length && hasParkingIds) state.catalogPoints = state.capacity.allParkings;
       recomputeCapacityCompare();
       renderCapacityCompare();
       toast(`${city.name}: all parkings ${fmtInt(state.capacity.allParkings.length)}`);
@@ -1890,7 +1914,7 @@
       state.capacity.sourceFileName = file.name;
       recomputeCapacityCompare();
       renderCapacityCompare();
-      toast(`${file.name}: capacity 4+ ${fmtInt(rows.length)}`);
+      toast(`${file.name}: capacity 2+ -> min 4 ${fmtInt(rows.length)}`);
     } catch (err) {
       console.error(err);
       toast(`${file.name}: ${err.message}`, true);
@@ -1975,7 +1999,7 @@
       const capTotal = Math.round(toNumber(row[6]));
       const capDayRaw = Math.round(toNumber(row[7]));
       const capEveningRaw = Math.round(toNumber(row[8]));
-      if (!name || Math.max(capTotal, capDayRaw, capEveningRaw) < 4) return null;
+      if (!name || Math.max(capTotal, capDayRaw, capEveningRaw) < 2) return null;
       return {
         rank: cleanText(row[0]),
         name,
@@ -1990,7 +2014,7 @@
         targetWeekend: Math.max(4, capTotal || capDayRaw || capEveningRaw),
       };
     }).filter(Boolean);
-    if (!rows.length) throw new Error("не нашел строк capacity 4+");
+    if (!rows.length) throw new Error("не нашел строк capacity 2+ / min 4");
     return rows;
   }
 
@@ -2113,10 +2137,14 @@
       item.rows.push(row);
       byKey.set(row.key, item);
     });
-    return { items: [...byKey.values()] };
+    const items = [...byKey.values()];
+    items.byKey = byKey;
+    return { items };
   }
 
   function bestMonitorCapacityMatch(sourceRow, monitorItems) {
+    const exact = monitorItems.byKey?.get(sourceRow.key);
+    if (exact) return { item: exact, score: 1 };
     let best = null;
     for (const item of monitorItems) {
       const score = capacityNameScore(sourceRow.key, item.key);
@@ -2160,9 +2188,17 @@
     }
 
     if (!sourceRows.length) {
-      els.capacityStatusText.textContent = "Upload weekday Capacity CSV. Then upload Monitor CSV; Weekend CSV is separate.";
-      els.capacityMissingList.innerHTML = `<div class="compact-item"><strong>Capacity CSV is not loaded</strong><span>Use the weekday file first. Weekend CSV updates only the weekend block.</span></div>`;
-      els.capacityMismatchTable.innerHTML = `<tr><td colspan="4">No comparison yet</td></tr>`;
+      const city = selectedCapacityCity();
+      const parkingText = state.capacity.allParkings.length ? `all parkings ${fmtInt(state.capacity.allParkings.length)}` : "all parkings not loaded";
+      const monitorText = cmp.monitorCount ? `monitor ${fmtInt(cmp.monitorCount)}` : "monitor not loaded";
+      const weekendText = state.capacity.weekendRows.length ? `weekend ${fmtInt(state.capacity.weekendRows.length)}` : "weekend not loaded";
+      els.capacityStatusText.textContent = `${city.name} / ${parkingText} / ${monitorText} / ${weekendText} / upload weekday Capacity CSV`;
+      els.capacityMissingList.innerHTML = `
+        <div class="compact-item"><strong>1. All parkings</strong><span>${esc(parkingText)}</span></div>
+        <div class="compact-item"><strong>2. Monitor parkings</strong><span>${esc(monitorText)}</span></div>
+        <div class="compact-item"><strong>3. Capacity</strong><span>Upload weekday Capacity CSV and optional Weekend CSV, then export ${esc(city.name)}.csv.</span></div>
+      `;
+      els.capacityMismatchTable.innerHTML = `<tr><td colspan="4">Waiting for weekday Capacity CSV. Loaded parkings stay cached.</td></tr>`;
       return;
     }
     if (!cmp.monitorCount) {
@@ -2259,9 +2295,9 @@
     const result = buildUpdatedMonitorFile({ preview: false });
     if (!result) return;
     const csv = serializeMonitorFile(result.headersRaw, result.outputRecords.map((record) => record.cells), result.delimiter || ";");
-    const name = `capacity-monitor-ready-${selectedCapacityCity().key || "city"}-${toDateKey(new Date())}.csv`;
+    const name = `${selectedCapacityCity().name || "city"}.csv`;
     downloadBlob(`\ufeff${csv}`, name, "text/csv;charset=utf-8");
-    toast(`Ready CSV: ${fmtInt(result.outputRecords.length)} rows ? updated ${fmtInt(result.updated)} ? added ${fmtInt(result.added)} ? skipped ${fmtInt(result.skipped.length)}`);
+    toast(`Ready CSV: ${fmtInt(result.outputRecords.length)} rows / updated ${fmtInt(result.updated)} / added ${fmtInt(result.added)} / skipped ${fmtInt(result.skipped.length)}`);
   }
 
   function createBlankMonitorFile() {
@@ -2360,11 +2396,17 @@
     let added = 0;
     const skipped = [];
     const seenTargets = new Set();
+    const resolvedParkingCache = new Map();
 
     targets.forEach((target) => {
       if (!target.capacity || target.capacity < 4) return;
-      const scheduleId = scheduleIds.get(target.schedule) || "";
-      const resolved = resolveCapacityParking(target.row, monitorIndex.items, catalogItems, parkingDirectory);
+      const scheduleId = scheduleIds.get(target.schedule) || capacityScheduleId(selectedCity, target.schedule) || "";
+      const resolveKey = target.row.key || capacityNameKey(target.row.name);
+      let resolved = resolvedParkingCache.get(resolveKey);
+      if (!resolvedParkingCache.has(resolveKey)) {
+        resolved = resolveCapacityParking(target.row, monitorIndex.items, catalogItems, parkingDirectory);
+        resolvedParkingCache.set(resolveKey, resolved || null);
+      }
       const resolvedName = resolved?.name || target.row.name;
       const resolvedKey = resolved?.id || capacityNameKey(resolvedName);
       if (!resolvedKey || !resolvedName) {
@@ -2378,6 +2420,11 @@
       if (existingIndex !== undefined) {
         const record = outputRecords[existingIndex];
         const oldValue = Number(cellAt(record.cells, indices.capacity));
+        if (resolved?.id) setCell(record.cells, indices.parkingId, resolved.id);
+        if (!cellAt(record.cells, indices.parkingName) && resolvedName) setCell(record.cells, indices.parkingName, resolvedName);
+        if (!cellAt(record.cells, indices.lat) && validCoordinatePair(resolved)) setCell(record.cells, indices.lat, resolved.lat);
+        if (!cellAt(record.cells, indices.lng) && validCoordinatePair(resolved)) setCell(record.cells, indices.lng, resolved.lng);
+        if (scheduleId) setCell(record.cells, indices.scheduleId, scheduleId);
         setCell(record.cells, indices.capacity, target.capacity);
         if (oldValue === Number(target.capacity)) unchanged += 1;
         else updated += 1;
@@ -2399,10 +2446,20 @@
       added += 1;
     });
 
+    const finalizedRecords = finalizeMonitorOutputRecords({
+      outputRecords,
+      indices,
+      selectedCity,
+      monitorItems: monitorIndex.items,
+      catalogItems,
+      parkingDirectory,
+      skipped,
+    });
+
     return {
       delimiter: file.delimiter || ";",
       headersRaw: file.headersRaw,
-      outputRecords,
+      outputRecords: finalizedRecords,
       updated,
       unchanged,
       added,
@@ -2410,26 +2467,117 @@
     };
   }
 
+  function finalizeMonitorOutputRecords({ outputRecords, indices, selectedCity, monitorItems, catalogItems, parkingDirectory, skipped }) {
+    const finalized = [];
+    outputRecords.forEach((record) => {
+      const cells = record.cells;
+      const schedule = normalizeCapacitySchedule(cellAt(cells, indices.scheduleName));
+      const parkingName = cellAt(cells, indices.parkingName);
+      if (schedule && !cellAt(cells, indices.scheduleId)) setCell(cells, indices.scheduleId, capacityScheduleId(selectedCity, schedule));
+
+      const capacityValue = Number(cellAt(cells, indices.capacity));
+      if (Number.isFinite(capacityValue) && capacityValue > 0 && capacityValue < 4) setCell(cells, indices.capacity, 4);
+
+      if (!cellAt(cells, indices.parkingId)) {
+        const candidate = {
+          name: parkingName,
+          key: capacityNameKey(parkingName),
+          lat: toNumber(cellAt(cells, indices.lat)),
+          lng: toNumber(cellAt(cells, indices.lng)),
+        };
+        const resolved = resolveCapacityParking(candidate, monitorItems, catalogItems, parkingDirectory);
+        if (resolved?.id) {
+          setCell(cells, indices.parkingId, resolved.id);
+          if (!parkingName && resolved.name) setCell(cells, indices.parkingName, resolved.name);
+          if (!cellAt(cells, indices.lat) && validCoordinatePair(resolved)) setCell(cells, indices.lat, resolved.lat);
+          if (!cellAt(cells, indices.lng) && validCoordinatePair(resolved)) setCell(cells, indices.lng, resolved.lng);
+        }
+      }
+
+      if (!cellAt(cells, indices.parkingId)) {
+        skipped.push({ name: parkingName || "unknown", schedule, reason: "parking_id not found in catalog" });
+        return;
+      }
+      finalized.push(record);
+    });
+    return finalized;
+  }
+
   function resolveCapacityParking(sourceRow, monitorItems, catalogItems, parkingDirectory) {
     const monitorMatch = bestMonitorCapacityMatch(sourceRow, monitorItems);
     if (monitorMatch && monitorMatch.score >= CAPACITY_MATCH_THRESHOLD) {
       const item = monitorMatch.item;
-      const withRecord = (item.rows || []).find((row) => row.id || row.sourceRecord) || item.rows?.[0];
+      const withRecord = (item.rows || []).find((row) => row.id || row.sourceRecord || validCoordinatePair(row)) || item.rows?.[0];
       const fromDirectory = withRecord?.id ? parkingDirectory.get(withRecord.id) : null;
-      return {
-        id: item.id || withRecord?.id,
+      const candidate = {
+        id: item.id || withRecord?.id || fromDirectory?.id,
         name: item.name || withRecord?.name || fromDirectory?.name,
+        key: item.key || withRecord?.key || capacityNameKey(item.name || withRecord?.name || fromDirectory?.name),
         lat: withRecord?.lat || fromDirectory?.lat,
         lng: withRecord?.lng || fromDirectory?.lng,
         source: "monitor",
         score: monitorMatch.score,
       };
+      return enrichCapacityParkingWithCatalog(candidate, catalogItems, parkingDirectory);
     }
     const catalogMatch = bestCatalogCapacityMatch(sourceRow, catalogItems);
     if (catalogMatch && catalogMatch.score >= CAPACITY_MATCH_THRESHOLD) {
       return { ...catalogMatch.item, source: "catalog", score: catalogMatch.score };
     }
+    const locationMatch = bestCatalogLocationMatch(sourceRow, catalogItems);
+    if (locationMatch) return { ...locationMatch.item, source: "catalog", score: locationMatch.score };
     return null;
+  }
+
+  function enrichCapacityParkingsWithCatalog(rows) {
+    const catalogItems = buildCatalogCapacityItems();
+    if (!catalogItems.length) return rows;
+    return (rows || []).map((row) => enrichCapacityParkingWithCatalog(row, catalogItems));
+  }
+
+  function enrichCapacityParkingWithCatalog(row, catalogItems = buildCatalogCapacityItems(), parkingDirectory = null) {
+    if (!row) return row;
+    const base = { ...row, key: row.key || capacityNameKey(row.name) };
+    let match = null;
+    if (base.id && parkingDirectory?.has(base.id)) {
+      match = { item: parkingDirectory.get(base.id), score: 1 };
+    }
+    if (!match && validCoordinatePair(base)) {
+      match = bestCatalogLocationMatch(base, catalogItems);
+    }
+    const nameMatch = bestCatalogCapacityMatch(base, catalogItems);
+    if (!match && nameMatch && nameMatch.score >= CAPACITY_MATCH_THRESHOLD) match = nameMatch;
+    if (!match && nameMatch && nameMatch.score >= CAPACITY_LOW_CONFIDENCE_THRESHOLD && !base.id) match = nameMatch;
+    const item = match?.item || null;
+    return {
+      ...base,
+      id: cleanText(base.id || item?.id || ""),
+      name: cleanText(base.name || item?.name || ""),
+      key: base.key || capacityNameKey(item?.name || ""),
+      lat: validCoordinatePair(base) ? Number(base.lat) : (validCoordinatePair(item) ? Number(item.lat) : base.lat),
+      lng: validCoordinatePair(base) ? Number(base.lng) : (validCoordinatePair(item) ? Number(item.lng) : base.lng),
+    };
+  }
+
+  function bestCatalogLocationMatch(sourceRow, catalogItems, maxMeters = 65) {
+    if (!validCoordinatePair(sourceRow)) return null;
+    let best = null;
+    catalogItems.forEach((item) => {
+      if (!item.id || !validCoordinatePair(item)) return;
+      const distanceM = haversineMeters(Number(sourceRow.lat), Number(sourceRow.lng), Number(item.lat), Number(item.lng));
+      if (!Number.isFinite(distanceM) || distanceM > maxMeters) return;
+      const nameScore = capacityNameScore(sourceRow.key || capacityNameKey(sourceRow.name), item.key);
+      const score = Math.max(0.9, 1 - (distanceM / maxMeters) * 0.08, nameScore);
+      if (!best || score > best.score || (score === best.score && distanceM < best.distanceM)) best = { item, score, distanceM };
+    });
+    return best;
+  }
+
+  function validCoordinatePair(row) {
+    if (!row) return false;
+    const lat = Number(row.lat);
+    const lng = Number(row.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) > 0.000001 && Math.abs(lng) > 0.000001;
   }
 
   function buildCatalogCapacityItems() {
@@ -2449,10 +2597,15 @@
       const mapKey = item.id || item.key;
       if (mapKey && item.key && !byId.has(mapKey)) byId.set(mapKey, item);
     });
-    return [...byId.values()];
+    const items = [...byId.values()];
+    items.byKey = new Map();
+    items.forEach((item) => { if (item.key && !items.byKey.has(item.key)) items.byKey.set(item.key, item); });
+    return items;
   }
 
   function bestCatalogCapacityMatch(sourceRow, catalogItems) {
+    const direct = catalogItems.byKey?.get(sourceRow.key || capacityNameKey(sourceRow.name));
+    if (direct) return { item: direct, score: 1 };
     let best = null;
     for (const item of catalogItems) {
       const score = capacityNameScore(sourceRow.key, item.key);
