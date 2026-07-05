@@ -89,6 +89,7 @@
       allParkings: [],
       allParkingsSource: "",
       monitorRulesSource: "",
+      autoRental: null,
     },
   };
 
@@ -149,6 +150,7 @@
       "capacityUploadBtn", "capacityInput", "monitorCapacityBtn", "monitorCapacityInput", "weekendCapacityBtn", "weekendCapacityInput",
       "capacityExportBtn", "monitorUpdateExportBtn", "capacityStatusText", "capacityKpiSource", "capacityKpiMatched",
       "capacityKpiMissing", "capacityKpiProblems", "capacityKpiGenerated", "capacityMissingList", "capacityMismatchTable",
+      "rentalAutoCapacityBtn", "autoCapacitySummary", "monitorSuggestionList",
     ].forEach((id) => {
       els[id] = document.getElementById(id);
     });
@@ -260,6 +262,7 @@
     });
     els.capacityExportBtn?.addEventListener("click", exportCapacityCompareCsv);
     els.monitorUpdateExportBtn?.addEventListener("click", exportUpdatedMonitorCsv);
+    els.rentalAutoCapacityBtn?.addEventListener("click", () => prepareMonitorFromRentalHistory({ auto: false }));
     window.addEventListener("bh-live-monitor-updated", () => {
       recomputeCapacityCompare();
       renderCapacityCompare();
@@ -412,8 +415,9 @@
       state.rides.push(...allNew);
       state.uploads = [...uploadRows, ...state.uploads].sort((a, b) => b.importedAt - a.importedAt);
       recompute();
-      setStatus("warn", `\u041f\u043e\u043a\u0430\u0437\u0430\u043d\u043e ${fmtInt(allNew.length)} \u00b7 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u044e \u0438\u0441\u0442\u043e\u0440\u0438\u044e`);
+      setStatus("warn", `\u041f\u043e\u043a\u0430\u0437\u0430\u043d\u043e ${fmtInt(allNew.length)} \u00b7 \u0441\u0447\u0438\u0442\u0430\u044e capacity`);
       void saveImportedRows(allNew, uploadRows);
+      void prepareMonitorFromRentalHistory({ auto: true });
     } else {
       setStatus(state.rides.length ? "ok" : "warn", state.rides.length ? "Мозг готов" : "История пустая");
     }
@@ -546,6 +550,9 @@
       endLat: endCoords.lat,
       endLng: endCoords.lng,
       endTs: endAt ? endAt.getTime() : null,
+      endDateKey: endAt ? toDateKey(endAt) : null,
+      endWeekday: endAt ? endAt.getDay() : null,
+      endHour: endAt ? endAt.getHours() : null,
     };
   }
 
@@ -888,6 +895,10 @@
       firstValue(row, ["\u0412\u0440\u0435\u043c\u044f \u043d\u0430\u0447\u0430\u043b\u0430 \u0430\u0440\u0435\u043d\u0434\u044b", "\u0412\u0440\u0435\u043c\u044f \u043d\u0430\u0447\u0430\u043b\u0430"])
     );
     if (!startAt) return null;
+    const endAt = parseDateTime(
+      firstValue(row, ["\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f \u0430\u0440\u0435\u043d\u0434\u044b", "\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f", "\u0414\u0430\u0442\u0430 \u043a\u043e\u043d\u0446\u0430"]),
+      firstValue(row, ["\u0412\u0440\u0435\u043c\u044f \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f \u0430\u0440\u0435\u043d\u0434\u044b", "\u0412\u0440\u0435\u043c\u044f \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f", "\u0412\u0440\u0435\u043c\u044f \u043a\u043e\u043d\u0446\u0430"])
+    );
 
     const startCoords = firstCoords(row, [
       "\u041c\u0435\u0441\u0442\u043e\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u0442\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u0430 (\u043d\u0430\u0447\u0430\u043b\u043e \u0430\u0440\u0435\u043d\u0434\u044b)",
@@ -936,6 +947,10 @@
       startLng: startCoords ? startCoords.lng : null,
       endLat: endCoords ? endCoords.lat : null,
       endLng: endCoords ? endCoords.lng : null,
+      endTs: endAt ? endAt.getTime() : null,
+      endDateKey: endAt ? toDateKey(endAt) : null,
+      endWeekday: endAt ? endAt.getDay() : null,
+      endHour: endAt ? endAt.getHours() : null,
     };
   }
 
@@ -1192,6 +1207,7 @@
     renderDonors();
     recomputeCapacityCompare();
     renderCapacityCompare();
+    renderAutoCapacitySummary();
     renderIcons();
   }
 
@@ -1707,7 +1723,7 @@
       } catch (gojetErr) {
         console.error(gojetErr);
         renderCapacityCompare();
-        if (els.capacityStatusText) els.capacityStatusText.textContent = `Monitor rules: ${appsErr.message || gojetErr.message}. ????? ????????? Monitor CSV ???????.`;
+        if (els.capacityStatusText) els.capacityStatusText.textContent = `Monitor rules: ${appsErr.message || gojetErr.message}. \u041c\u043e\u0436\u043d\u043e \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c Monitor CSV \u0432\u0440\u0443\u0447\u043d\u0443\u044e.`;
         toast(`Monitor rules: ${appsErr.message || gojetErr.message}`, true);
         return;
       }
@@ -1906,6 +1922,307 @@
     return null;
   }
 
+
+  async function prepareMonitorFromRentalHistory({ auto = false } = {}) {
+    if (!state.rides.length) {
+      if (!auto) toast("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u0438 \u0430\u0440\u0435\u043d\u0434\u044b XLSX", true);
+      renderAutoCapacitySummary();
+      return null;
+    }
+    try {
+      setStatus("warn", "JET Brain: \u0441\u0447\u0438\u0442\u0430\u044e capacity \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0430\u043c");
+      const built = buildRentalCapacityRows(state.rides);
+      if (!built.sourceRows.length && !built.weekendRows.length) {
+        toast("\u0412 \u0430\u0440\u0435\u043d\u0434\u0430\u0445 \u043d\u0435 \u043d\u0430\u0448\u0435\u043b \u043f\u0430\u0440\u043a\u043e\u0432\u043a\u0438 \u0441 capacity 2+", true);
+        state.capacity.autoRental = built.summary;
+        renderAutoCapacitySummary();
+        return null;
+      }
+      state.capacity.sourceRows = built.sourceRows;
+      state.capacity.weekendRows = built.weekendRows;
+      state.capacity.sourceFileName = "auto: rentals weekday/friday";
+      state.capacity.weekendFileName = "auto: rentals weekend";
+      state.capacity.autoRental = built.summary;
+      renderAutoCapacitySummary();
+
+      if (!state.capacity.allParkings.length || state.capacity.allParkings.some((point) => !point.id)) {
+        await loadSelectedCityParkings();
+      }
+      if (!state.capacity.monitorRows.length) {
+        await loadSelectedCityMonitorRules();
+      }
+      recomputeCapacityCompare();
+      renderCapacityCompare();
+      renderAutoCapacitySummary();
+      setStatus("ok", `Monitor CSV \u0433\u043e\u0442\u043e\u0432: ${fmtInt(state.capacity.generated?.outputRecords?.length || 0)} \u0441\u0442\u0440\u043e\u043a`);
+      if (!auto) toast("\u0413\u043e\u0442\u043e\u0432\u043e: capacity \u0441\u043e\u0431\u0440\u0430\u043d \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0430\u043c, \u043c\u043e\u0436\u043d\u043e \u0441\u043a\u0430\u0447\u0430\u0442\u044c Belo Horizonte.csv");
+      return built;
+    } catch (err) {
+      console.error(err);
+      setStatus("bad", "\u041e\u0448\u0438\u0431\u043a\u0430 auto capacity");
+      toast(`Auto capacity: ${err.message}`, true);
+      renderAutoCapacitySummary();
+      return null;
+    }
+  }
+
+  function buildRentalCapacityRows(rides) {
+    const usable = (rides || []).filter((ride) => ride.city === CITY && ride.ts);
+    const latestTs = usable.reduce((max, ride) => Math.max(max, ride.ts || 0), 0);
+    const cutoffTs = latestTs ? latestTs - state.settings.lookbackDays * 86400000 : 0;
+    const resolver = buildParkingResolver(usable);
+    const recent = usable
+      .filter((ride) => !cutoffTs || ride.ts >= cutoffTs)
+      .map((ride) => resolveRideEndParking(resolveRideParking(ride, resolver), resolver));
+
+    const groups = {
+      weekday: createRentalCapacityGroup("\u0411\u0443\u0434\u043d\u0438"),
+      friday: createRentalCapacityGroup("\u041f\u044f\u0442\u043d\u0438\u0446\u0430"),
+      weekend: createRentalCapacityGroup("\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435"),
+    };
+
+    recent.forEach((ride) => {
+      if (ride.isParkingSignal && isUsableParking(ride.parkingName)) {
+        addRentalCapacityEvent(groups, ride.weekday, ride.dateKey, ride.hour, ride.parkingName, ride.parkingKey, "start", ride);
+      }
+      if (isUsableParking(ride.endName)) {
+        const endMeta = rentalEndMeta(ride);
+        addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, normalizeSearch(ride.endName), "end", ride);
+      }
+    });
+
+    const weekdayRows = summarizeRentalCapacityGroup(groups.weekday);
+    const fridayRows = summarizeRentalCapacityGroup(groups.friday);
+    const weekendRowsRaw = summarizeRentalCapacityGroup(groups.weekend);
+    const merged = new Map();
+
+    weekdayRows.forEach((row) => {
+      merged.set(row.key, {
+        ...row,
+        targetFridayDay: 0,
+        targetFridayEvening: 0,
+        targetWeekend: 0,
+        blockSummary: `\u0411\u0443\u0434\u043d\u0438 ${row.targetDay}/${row.targetEvening}`,
+      });
+    });
+    fridayRows.forEach((row) => {
+      const base = merged.get(row.key) || {
+        ...row,
+        targetDay: 0,
+        targetEvening: 0,
+        capTotal: 0,
+        targetWeekend: 0,
+        startsPerDay: "0.0",
+        finishesPerDay: "0.0",
+        balance: "0.0",
+        zoneType: row.zoneType,
+      };
+      base.targetFridayDay = row.targetDay;
+      base.targetFridayEvening = row.targetEvening;
+      base.fridayStartsPerDay = row.startsPerDay;
+      base.blockSummary = [
+        base.targetDay || base.targetEvening ? `\u0411\u0443\u0434\u043d\u0438 ${base.targetDay}/${base.targetEvening}` : "",
+        `\u041f\u0442 ${row.targetDay}/${row.targetEvening}`,
+      ].filter(Boolean).join(" | ");
+      merged.set(row.key, base);
+    });
+
+    const sourceRows = [...merged.values()]
+      .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0) >= 4)
+      .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0))
+      .map((row, index) => ({ ...row, rank: index + 1 }));
+
+    const weekendRows = weekendRowsRaw
+      .filter((row) => row.targetWeekend >= 4)
+      .map((row, index) => ({ ...row, rank: index + 1, blockSummary: `\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435 ${row.targetWeekend}` }));
+
+    return {
+      sourceRows,
+      weekendRows,
+      summary: {
+        at: Date.now(),
+        rides: recent.length,
+        days: new Set(recent.map((ride) => ride.dateKey)).size,
+        lookbackDays: state.settings.lookbackDays,
+        weekdayDays: groups.weekday.days.size,
+        fridayDays: groups.friday.days.size,
+        weekendDays: groups.weekend.days.size,
+        weekdayRows: sourceRows.length,
+        weekendRows: weekendRows.length,
+      },
+    };
+  }
+
+  function createRentalCapacityGroup(label) {
+    return { label, days: new Set(), parkings: new Map() };
+  }
+
+  function addRentalCapacityEvent(groups, weekday, dateKey, hour, name, key, type, ride) {
+    const block = rentalCapacityBlock(weekday);
+    const group = groups[block];
+    if (!group || !dateKey || !Number.isFinite(Number(hour))) return;
+    const parkingKey = key || normalizeSearch(name);
+    if (!parkingKey || !name) return;
+    group.days.add(dateKey);
+    if (!group.parkings.has(parkingKey)) {
+      group.parkings.set(parkingKey, {
+        key: parkingKey,
+        name,
+        days: new Map(),
+        starts: 0,
+        ends: 0,
+        lat: ride.startLat ?? ride.endLat ?? null,
+        lng: ride.startLng ?? ride.endLng ?? null,
+      });
+    }
+    const item = group.parkings.get(parkingKey);
+    item.name = item.name || name;
+    if (item.lat == null && (ride.startLat != null || ride.endLat != null)) item.lat = ride.startLat ?? ride.endLat;
+    if (item.lng == null && (ride.startLng != null || ride.endLng != null)) item.lng = ride.startLng ?? ride.endLng;
+    if (!item.days.has(dateKey)) item.days.set(dateKey, Array.from({ length: 24 }, () => ({ dep: 0, arr: 0 })));
+    const bucket = item.days.get(dateKey)[clamp(Number(hour), 0, 23)];
+    if (type === "start") {
+      bucket.dep += 1;
+      item.starts += 1;
+    } else {
+      bucket.arr += 1;
+      item.ends += 1;
+    }
+  }
+
+  function rentalCapacityBlock(weekday) {
+    if (weekday === 5) return "friday";
+    if (weekday === 0 || weekday === 6) return "weekend";
+    return "weekday";
+  }
+
+  function rentalEndMeta(ride) {
+    if (ride.endTs) {
+      const dt = new Date(ride.endTs);
+      return { dateKey: ride.endDateKey || toDateKey(dt), weekday: ride.endWeekday ?? dt.getDay(), hour: ride.endHour ?? dt.getHours() };
+    }
+    if (ride.durationSec && ride.ts) {
+      const dt = new Date(ride.ts + ride.durationSec * 1000);
+      return { dateKey: toDateKey(dt), weekday: dt.getDay(), hour: dt.getHours() };
+    }
+    return { dateKey: ride.dateKey, weekday: ride.weekday, hour: ride.hour };
+  }
+
+  function summarizeRentalCapacityGroup(group) {
+    const days = [...group.days].sort();
+    if (!days.length) return [];
+    const rows = [];
+    group.parkings.forEach((item) => {
+      const capsAll = [];
+      const capsDay = [];
+      const capsEvening = [];
+      days.forEach((day) => {
+        const matrix = item.days.get(day) || emptyRentalDayMatrix();
+        capsAll.push(rentalMaxDeficit(matrix, Array.from({ length: 24 }, (_, hour) => hour)));
+        capsDay.push(rentalMaxDeficit(matrix, Array.from({ length: 12 }, (_, hour) => hour)));
+        capsEvening.push(rentalMaxDeficit(matrix, Array.from({ length: 12 }, (_, hour) => hour + 12)));
+      });
+      const rawAll = Math.ceil(avg(capsAll));
+      const rawDay = Math.ceil(avg(capsDay));
+      const rawEvening = Math.ceil(avg(capsEvening));
+      const targetDay = capacityExportMinimum(rawDay);
+      const targetEvening = capacityExportMinimum(rawEvening);
+      const targetWeekend = capacityExportMinimum(rawAll || Math.max(rawDay, rawEvening));
+      if (Math.max(targetDay, targetEvening, targetWeekend) < 4) return;
+      const startsPerDay = item.starts / Math.max(1, days.length);
+      const finishesPerDay = item.ends / Math.max(1, days.length);
+      rows.push({
+        rank: 0,
+        name: item.name,
+        key: capacityNameKey(item.name),
+        startsPerDay: startsPerDay.toFixed(1),
+        finishesPerDay: finishesPerDay.toFixed(1),
+        balance: (startsPerDay - finishesPerDay).toFixed(1),
+        zoneType: startsPerDay > finishesPerDay * 1.35 ? "\u0441\u0442\u0430\u0440\u0442\u043e\u0432\u0430\u044f" : finishesPerDay > startsPerDay * 1.35 ? "\u0444\u0438\u043d\u0438\u0448\u043d\u0430\u044f" : "\u0440\u043e\u0432\u043d\u0430\u044f",
+        capTotal: targetWeekend,
+        targetDay,
+        targetEvening,
+        targetWeekend,
+        lat: item.lat,
+        lng: item.lng,
+      });
+    });
+    return rows.sort((a, b) => Math.max(b.capTotal, b.targetDay, b.targetEvening) - Math.max(a.capTotal, a.targetDay, a.targetEvening));
+  }
+
+  function emptyRentalDayMatrix() {
+    return Array.from({ length: 24 }, () => ({ dep: 0, arr: 0 }));
+  }
+
+  function rentalMaxDeficit(matrix, hours) {
+    let cumulative = 0;
+    let peak = 0;
+    hours.forEach((hour) => {
+      const bucket = matrix[hour] || {};
+      cumulative += (bucket.dep || 0) - (bucket.arr || 0);
+      if (cumulative > peak) peak = cumulative;
+    });
+    return peak;
+  }
+
+  function capacityExportMinimum(value) {
+    const rounded = Math.round(Number(value) || 0);
+    return rounded >= 2 ? Math.max(4, rounded) : 0;
+  }
+
+  function avg(values) {
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  }
+
+  function capacityRowTargetLabel(row) {
+    const parts = [];
+    if (row.targetDay || row.targetEvening) parts.push(`\u0411\u0443\u0434\u043d\u0438 ${fmtInt(row.targetDay || 0)}/${fmtInt(row.targetEvening || 0)}`);
+    if (row.targetFridayDay || row.targetFridayEvening) parts.push(`\u041f\u0442 ${fmtInt(row.targetFridayDay || 0)}/${fmtInt(row.targetFridayEvening || 0)}`);
+    if (row.targetWeekend) parts.push(`\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435 ${fmtInt(row.targetWeekend)}`);
+    return parts.join(" | ");
+  }
+
+  function renderAutoCapacitySummary() {
+    if (!els.autoCapacitySummary) return;
+    const auto = state.capacity?.autoRental;
+    const generated = state.capacity?.generated;
+    if (!auto) {
+      els.autoCapacitySummary.innerHTML = `
+        <div class="auto-empty"><strong>\u0417\u0430\u0433\u0440\u0443\u0437\u0438 \u0430\u0440\u0435\u043d\u0434\u044b XLSX</strong><span>JET Brain \u0441\u0430\u043c \u0440\u0430\u0437\u043b\u043e\u0436\u0438\u0442 \u0431\u0443\u0434\u043d\u0438, \u043f\u044f\u0442\u043d\u0438\u0446\u0443 \u0438 \u0432\u044b\u0445\u043e\u0434\u043d\u044b\u0435, \u043f\u043e\u0442\u043e\u043c \u0441\u043e\u0431\u0435\u0440\u0435\u0442 monitor CSV.</span></div>
+      `;
+    } else {
+      els.autoCapacitySummary.innerHTML = `
+        <div class="auto-metrics">
+          <div><strong>${fmtInt(auto.rides)}</strong><span>\u0430\u0440\u0435\u043d\u0434 \u0432 \u0440\u0430\u0441\u0447\u0435\u0442\u0435</span></div>
+          <div><strong>${fmtInt(auto.weekdayDays)}</strong><span>\u0431\u0443\u0434\u043d\u0438\u0445 \u0434\u043d\u0435\u0439</span></div>
+          <div><strong>${fmtInt(auto.fridayDays)}</strong><span>\u043f\u044f\u0442\u043d\u0438\u0446</span></div>
+          <div><strong>${fmtInt(auto.weekendDays)}</strong><span>\u0432\u044b\u0445\u043e\u0434\u043d\u044b\u0445 \u0434\u043d\u0435\u0439</span></div>
+          <div><strong>${fmtInt(generated?.outputRecords?.length || 0)}</strong><span>\u0441\u0442\u0440\u043e\u043a CSV</span></div>
+        </div>
+      `;
+    }
+    renderMonitorSuggestions();
+  }
+
+  function renderMonitorSuggestions() {
+    if (!els.monitorSuggestionList) return;
+    const cmp = state.capacity?.comparison;
+    const rows = [
+      ...(cmp?.missing || []).map((row) => ({ ...row, kind: "\u0434\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0432 monitor" })),
+      ...(cmp?.possible || []).map((row) => ({ ...row, kind: "\u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435" })),
+    ];
+    if (!rows.length) {
+      els.monitorSuggestionList.innerHTML = `<div class="compact-item"><strong>\u041f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043d\u043e\u0432\u044b\u0445 \u043f\u0430\u0440\u043a\u043e\u0432\u043e\u043a</strong><span>\u041f\u043e\u0441\u043b\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0430\u0440\u0435\u043d\u0434\u044b \u0437\u0434\u0435\u0441\u044c \u043f\u043e\u044f\u0432\u044f\u0442\u0441\u044f \u0442\u043e\u0447\u043a\u0438, \u043a\u043e\u0442\u043e\u0440\u044b\u0445 \u043d\u0435\u0442 \u0432 monitor.</span></div>`;
+      return;
+    }
+    els.monitorSuggestionList.innerHTML = rows.slice(0, 10).map((row, index) => `
+      <div class="compact-item monitor-add-item">
+        <strong>${index + 1}. ${esc(row.parking)}</strong>
+        <span>${esc(row.kind)} | ${esc(row.targetLabel || "capacity 2+ / min 4")} | score ${esc(row.matchScore || 0)}</span>
+      </div>
+    `).join("");
+  }
+
   async function importCapacityCsv(file) {
     try {
       const text = await file.text();
@@ -1955,19 +2272,59 @@
   function recomputeCapacityCompare() {
     if (!state.capacity) return;
     const monitorInfo = getMonitorCapacityRows();
-    const sourceRows = state.capacity.sourceRows || [];
+    const sourceRows = getCapacityComparisonRows();
     if (!sourceRows.length) {
       state.capacity.comparison = emptyCapacityComparison(monitorInfo);
-      state.capacity.generated = state.capacity.weekendRows.length ? buildUpdatedMonitorFile({ preview: true }) : null;
+      state.capacity.generated = null;
       return;
     }
     state.capacity.comparison = compareCapacityRows(sourceRows, monitorInfo.rows, monitorInfo.source);
     state.capacity.generated = buildUpdatedMonitorFile({ preview: true });
   }
 
+  function getCapacityComparisonRows() {
+    const merged = new Map();
+    const put = (row, type) => {
+      if (!row?.name) return;
+      const key = row.key || capacityNameKey(row.name);
+      if (!key) return;
+      const existing = merged.get(key) || {
+        ...row,
+        key,
+        targetDay: 0,
+        targetEvening: 0,
+        targetFridayDay: 0,
+        targetFridayEvening: 0,
+        targetWeekend: 0,
+      };
+      if (type === "regular") {
+        existing.rank = existing.rank || row.rank;
+        existing.name = existing.name || row.name;
+        existing.targetDay = Math.max(existing.targetDay || 0, row.targetDay || 0);
+        existing.targetEvening = Math.max(existing.targetEvening || 0, row.targetEvening || 0);
+        existing.targetFridayDay = Math.max(existing.targetFridayDay || 0, row.targetFridayDay || 0);
+        existing.targetFridayEvening = Math.max(existing.targetFridayEvening || 0, row.targetFridayEvening || 0);
+        existing.startsPerDay = row.startsPerDay || existing.startsPerDay;
+        existing.zoneType = row.zoneType || existing.zoneType;
+      } else if (type === "weekend") {
+        existing.rank = existing.rank || row.rank;
+        existing.name = existing.name || row.name;
+        existing.targetWeekend = Math.max(existing.targetWeekend || 0, row.targetWeekend || row.capTotal || 0);
+        existing.weekendStartsPerDay = row.startsPerDay || existing.weekendStartsPerDay;
+        existing.zoneType = existing.zoneType || row.zoneType;
+      }
+      merged.set(key, existing);
+    };
+    (state.capacity.sourceRows || []).forEach((row) => put(row, "regular"));
+    (state.capacity.weekendRows || []).forEach((row) => put(row, "weekend"));
+    return [...merged.values()]
+      .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0, row.targetWeekend || 0) >= 4)
+      .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0, b.targetWeekend || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0, a.targetWeekend || 0));
+  }
+
   function emptyCapacityComparison(monitorInfo) {
     return {
-      sourceCount: state.capacity?.sourceRows?.length || 0,
+      sourceCount: (state.capacity?.sourceRows?.length || 0) + (state.capacity?.weekendRows?.length || 0),
       monitorCount: monitorInfo.rows.length,
       monitorSource: monitorInfo.source,
       matchedCount: 0,
@@ -2086,8 +2443,12 @@
         parking: row.name,
         targetDay: row.targetDay,
         targetEvening: row.targetEvening,
+        targetFridayDay: row.targetFridayDay,
+        targetFridayEvening: row.targetFridayEvening,
+        targetWeekend: row.targetWeekend,
         startsPerDay: row.startsPerDay,
         zoneType: row.zoneType,
+        targetLabel: capacityRowTargetLabel(row),
         bestMonitor: best?.item?.name || "",
         matchScore: best ? Number(best.score.toFixed(3)) : 0,
       };
@@ -2102,7 +2463,11 @@
       [
         { schedule: CAPACITY_DAY_SCHEDULE, expected: row.targetDay, label: "weekday morning" },
         { schedule: CAPACITY_EVENING_SCHEDULE, expected: row.targetEvening, label: "weekday evening" },
+        { schedule: CAPACITY_FRIDAY_DAY_SCHEDULE, expected: row.targetFridayDay, label: "friday day" },
+        { schedule: CAPACITY_FRIDAY_EVENING_SCHEDULE, expected: row.targetFridayEvening, label: "friday evening" },
+        { schedule: CAPACITY_WEEKEND_SCHEDULE, expected: row.targetWeekend, label: "weekend" },
       ].forEach(({ schedule, expected, label }) => {
+        if (!expected || Number(expected) < 4) return;
         const actual = item.capacities[schedule];
         if (actual == null) {
           mismatches.push({ ...base, monitorParking: item.name, schedule, label, expected, actual: "", difference: "", problem: "missing schedule" });
@@ -2234,7 +2599,7 @@
       html.push(`
         <div class="compact-item">
           <strong>${esc(row.rank ? `${row.rank}. ` : "")}${esc(row.parking)}</strong>
-          <span>${esc(row.title)} / morning ${fmtInt(row.targetDay)} / evening ${fmtInt(row.targetEvening)} / starts/day ${esc(row.startsPerDay || "N/D")}</span>
+          <span>${esc(row.title)} / ${esc(row.targetLabel || `morning ${fmtInt(row.targetDay)} / evening ${fmtInt(row.targetEvening)}`)} / starts/day ${esc(row.startsPerDay || "N/D")}</span>
           ${row.bestMonitor ? `<span>Closest: ${esc(row.bestMonitor)} / score ${row.matchScore}</span>` : ""}
         </div>
       `);
@@ -2382,10 +2747,12 @@
     const catalogItems = buildCatalogCapacityItems();
     const targets = [];
     weekdayRows.forEach((row) => {
+      const fridayDay = row.targetFridayDay == null ? row.targetDay : row.targetFridayDay;
+      const fridayEvening = row.targetFridayEvening == null ? row.targetEvening : row.targetFridayEvening;
       targets.push({ row, schedule: CAPACITY_DAY_SCHEDULE, capacity: row.targetDay, source: "weekday" });
       targets.push({ row, schedule: CAPACITY_EVENING_SCHEDULE, capacity: row.targetEvening, source: "weekday" });
-      targets.push({ row, schedule: CAPACITY_FRIDAY_DAY_SCHEDULE, capacity: row.targetDay, source: "friday" });
-      targets.push({ row, schedule: CAPACITY_FRIDAY_EVENING_SCHEDULE, capacity: row.targetEvening, source: "friday" });
+      targets.push({ row, schedule: CAPACITY_FRIDAY_DAY_SCHEDULE, capacity: fridayDay, source: "friday" });
+      targets.push({ row, schedule: CAPACITY_FRIDAY_EVENING_SCHEDULE, capacity: fridayEvening, source: "friday" });
     });
     weekendRows.forEach((row) => {
       targets.push({ row, schedule: CAPACITY_WEEKEND_SCHEDULE, capacity: row.targetWeekend || row.capTotal || Math.max(row.targetDay || 0, row.targetEvening || 0, 4), source: "weekend" });
