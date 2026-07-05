@@ -50,6 +50,7 @@
   ];
   const CAPACITY_CITY_STORAGE_KEY = "parkingBrainCapacityCities";
   const LOGISTIC_BASE = "https://logistic.gojet.app/api/v0/urent";
+  const BUNDLED_PARKINGS_INDEX_URL = "./parkings/index.json";
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwI4vWqnNW4icATzMh1JLkeLGJg2mQNXSVGIAK_sRzmjO2DLV_Ba3QWB0V7QpCmxsVPtw/exec";
   const APPS_SCRIPT_PROXY_URL = "/.netlify/functions/apps-script";
   const APPS_SCRIPT_TOKEN_KEY = "parkingBrainAppsScriptToken";
@@ -119,6 +120,7 @@
     bindElements();
     bindEvents();
     initCapacityCities();
+    void loadBundledCityIndex().catch((err) => console.warn("Bundled parking index load failed", err));
     setStatus("warn", "Загрузка истории");
     try {
       const catalogPromise = loadManagersParkingCatalog().catch((err) => {
@@ -1397,6 +1399,47 @@
 
 
 
+  async function loadBundledCityIndex() {
+    const res = await fetch(BUNDLED_PARKINGS_INDEX_URL, { cache: "no-cache" });
+    if (!res.ok) throw new Error(`parkings index ${res.status}`);
+    const payload = await res.json();
+    const entries = Array.isArray(payload)
+      ? payload
+      : Object.entries(payload || {}).map(([key, value]) => ({ key, ...(value || {}) }));
+    let changed = false;
+    entries.forEach((entry) => {
+      const fileId = cleanText(String(entry.file || "").replace(/\.json$/i, ""));
+      const id = cleanText(entry.areaId || entry.city_id || entry.cityId || entry.id || fileId);
+      const name = cleanText(entry.city || entry.name || entry.cidade || entry.key || "");
+      if (!id || !name) return;
+      changed = Boolean(upsertCapacityCityOption({
+        key: capacityCityKeyFromName(name),
+        name,
+        uf: cleanText(entry.uf || entry.state || ""),
+        id,
+      })) || changed;
+    });
+    if (changed && els.capacityCitySelect) initCapacityCities();
+  }
+
+  function upsertCapacityCityOption(city) {
+    const id = cleanText(city?.id || "");
+    const name = cleanText(city?.name || "");
+    const key = cleanText(city?.key || "") || capacityCityKeyFromName(name || id);
+    const existing = (id && CAPACITY_CITY_OPTIONS.find((item) => cleanText(item.id) === id))
+      || capacityCityByName(name)
+      || capacityCityByKey(key);
+    if (existing) {
+      existing.id = cleanText(existing.id || id);
+      existing.name = cleanText(existing.name || name || key);
+      existing.uf = cleanText(existing.uf || city?.uf || "");
+      return existing;
+    }
+    const option = { key, name: name || key, uf: cleanText(city?.uf || ""), id };
+    CAPACITY_CITY_OPTIONS.push(option);
+    CAPACITY_CITY_OPTIONS.sort((a, b) => cleanText(a.name).localeCompare(cleanText(b.name), "pt-BR"));
+    return option;
+  }
   function initCapacityCities() {
     if (!els.capacityCitySelect) return;
     els.capacityCitySelect.innerHTML = CAPACITY_CITY_OPTIONS.map((city) => `<option value="${esc(city.key)}">${esc(city.name)}</option>`).join("");
