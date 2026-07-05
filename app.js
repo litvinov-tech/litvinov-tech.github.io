@@ -2953,7 +2953,10 @@
     const name = `${selectedCapacityCity().name || "city"}.csv`;
     downloadBlob(`\ufeff${csv}`, name, "text/csv;charset=utf-8");
     const missingIds = result.skipped.filter((row) => String(row.reason || "").includes("parking_id missing")).length;
-    toast(`Ready CSV: ${fmtInt(result.outputRecords.length)} rows / updated ${fmtInt(result.updated)} / added ${fmtInt(result.added)} / sem parking_id ${fmtInt(missingIds)}`);
+    const scheduleIdIndex = result.headersRaw.map(headerKey).indexOf("schedule id");
+    const missingSchedules = scheduleIdIndex >= 0 ? result.outputRecords.filter((record) => !cellAt(record.cells, scheduleIdIndex)).length : 0;
+    const missingCoords = result.skipped.filter((row) => String(row.reason || "").includes("coordinates missing")).length;
+    toast(`Ready CSV: ${fmtInt(result.outputRecords.length)} rows / updated ${fmtInt(result.updated)} / added ${fmtInt(result.added)} / sem schedule_id ${fmtInt(missingSchedules)} / sem parking_id ${fmtInt(missingIds)} / sem coords ${fmtInt(missingCoords)}`);
   }
 
   function createBlankMonitorFile() {
@@ -3070,8 +3073,7 @@
       if (!target.capacity || target.capacity < 4) return;
       const scheduleId = scheduleIds.get(target.schedule) || capacityScheduleId(selectedCity, target.schedule) || "";
       if (!scheduleId) {
-        skipped.push({ name: target.row.name, schedule: target.schedule, reason: "schedule_id missing for selected city; load correct Monitor CSV/rules" });
-        return;
+        skipped.push({ name: target.row.name, schedule: target.schedule, reason: "schedule_id missing for selected city; exported with empty schedule_id" });
       }
       const resolveKey = target.row.key || capacityNameKey(target.row.name);
       let resolved = resolvedParkingCache.get(resolveKey);
@@ -3183,8 +3185,7 @@
         return;
       }
       if (!finalScheduleId) {
-        skipped.push({ name: finalParkingName, schedule, reason: "schedule_id missing for selected city" });
-        return;
+        skipped.push({ name: finalParkingName, schedule, reason: "schedule_id missing for selected city; exported with empty schedule_id" });
       }
       if (!finalParkingId) {
         skipped.push({ name: finalParkingName, schedule, reason: "parking_id missing" });
