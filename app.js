@@ -1925,8 +1925,12 @@
 
   async function prepareMonitorFromRentalHistory({ auto = false } = {}) {
     if (!state.rides.length) {
-      if (!auto) toast("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u0438 \u0430\u0440\u0435\u043d\u0434\u044b XLSX", true);
       renderAutoCapacitySummary();
+      if (!auto) {
+        setStatus("warn", "\u0412\u044b\u0431\u0435\u0440\u0438 XLSX \u0430\u0440\u0435\u043d\u0434\u044b");
+        toast("\u0412\u044b\u0431\u0435\u0440\u0438 \u0444\u0430\u0439\u043b \u0430\u0440\u0435\u043d\u0434\u044b XLSX");
+        els.fileInput?.click();
+      }
       return null;
     }
     try {

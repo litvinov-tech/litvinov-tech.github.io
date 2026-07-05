@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="./styles.css">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./app.js?v=20260705-6" defer></script>
+    <script src="./app.js?v=20260705-7" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -44,7 +44,7 @@
 
           <section class="settings-panel">
             <div class="section-head">
-              <h2>Настройки мозга</h2>
+              <h2>Настройки расчета</h2>
             </div>
 
             <label class="range-row">
@@ -53,19 +53,19 @@
               <input id="lookbackDays" type="range" min="3" max="60" step="1" value="21">
             </label>
 
-            <label class="range-row">
+            <label class="range-row legacy-brain-control">
               <span>Заранее</span>
               <strong><span id="leadValue">45</span> мин.</strong>
               <input id="leadMinutes" type="range" min="15" max="180" step="15" value="45">
             </label>
 
-            <label class="range-row">
+            <label class="range-row legacy-brain-control">
               <span>Мин. аренды</span>
               <strong><span id="minRidesValue">3</span></strong>
               <input id="minRides" type="range" min="1" max="25" step="1" value="3">
             </label>
 
-            <label class="range-row">
+            <label class="range-row legacy-brain-control">
               <span>Топ</span>
               <strong><span id="topLimitValue">24</span></strong>
               <input id="topLimit" type="range" min="8" max="60" step="1" value="24">
