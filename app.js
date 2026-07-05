@@ -50,8 +50,10 @@
   const CAPACITY_CITY_STORAGE_KEY = "parkingBrainCapacityCities";
   const LOGISTIC_BASE = "https://logistic.gojet.app/api/v0/urent";
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwI4vWqnNW4icATzMh1JLkeLGJg2mQNXSVGIAK_sRzmjO2DLV_Ba3QWB0V7QpCmxsVPtw/exec";
+  const APPS_SCRIPT_PROXY_URL = "/.netlify/functions/apps-script";
   const APPS_SCRIPT_TOKEN_KEY = "parkingBrainAppsScriptToken";
   const APPS_SCRIPT_USER_KEY = "parkingBrainAppsScriptUser";
+  const CAPACITY_PARKINGS_CACHE_PREFIX = "parkingBrainAllParkings:";
   let goJetCityMapPromise = null;
   let goJetCityMap = new Map();
 
@@ -1407,7 +1409,7 @@
 
   function initAppsScriptBridge() {
     if (els.appsScriptUser) els.appsScriptUser.value = localStorage.getItem(APPS_SCRIPT_USER_KEY) || "";
-    updateAppsScriptStatus(appsScriptToken() ? "Apps Script conectado" : "offline", appsScriptToken() ? "ok" : "");
+    updateAppsScriptStatus(appsScriptToken() ? "manual conectado" : "auto Netlify", appsScriptToken() ? "ok" : "");
   }
 
   function appsScriptToken() {
@@ -1449,12 +1451,22 @@
   }
 
   async function fetchAppsScript(payload, { auth = true } = {}) {
+    if (auth) {
+      try {
+        const data = await fetchAppsScriptProxy(payload);
+        updateAppsScriptStatus("auto Netlify ok", "ok");
+        return data;
+      } catch (proxyErr) {
+        console.warn("Apps Script proxy failed, trying manual token", proxyErr);
+      }
+    }
+
     const body = { ...payload };
     if (auth) {
       const token = appsScriptToken();
       if (!token) {
-        updateAppsScriptStatus("conecte Apps Script", "bad");
-        throw new Error("conecte Apps Script primeiro");
+        updateAppsScriptStatus("proxy/manual offline", "bad");
+        throw new Error("Netlify auto login unavailable; use manual Apps Script login");
       }
       body._token = token;
     }
@@ -1471,6 +1483,25 @@
       throw new Error(data.msg || "Sessao expirada");
     }
     if (data?.ok === false) throw new Error(data.msg || "Apps Script error");
+    return data;
+  }
+
+  async function fetchAppsScriptProxy(payload) {
+    const res = await fetch(APPS_SCRIPT_PROXY_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let msg = `Netlify function ${res.status}`;
+      try {
+        const data = await res.json();
+        msg = data?.msg || msg;
+      } catch {}
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    if (data?.ok === false || data?.authError) throw new Error(data.msg || "Apps Script proxy error");
     return data;
   }
 
@@ -1495,6 +1526,25 @@
     return scan(payload);
   }
 
+
+  function appsScriptMonitorRows(payload) {
+    const rows = [];
+    const add = (key, schedule) => {
+      const items = Array.isArray(payload?.[key]) ? payload[key] : [];
+      items.forEach((item) => rows.push({ ...item, schedule: item.schedule || schedule }));
+    };
+    add("dia", CAPACITY_DAY_SCHEDULE);
+    add("manha", CAPACITY_DAY_SCHEDULE);
+    add("noite", CAPACITY_EVENING_SCHEDULE);
+    add("sextaDia", CAPACITY_FRIDAY_DAY_SCHEDULE);
+    add("sexta_dia", CAPACITY_FRIDAY_DAY_SCHEDULE);
+    add("sextaNoite", CAPACITY_FRIDAY_EVENING_SCHEDULE);
+    add("sexta_noite", CAPACITY_FRIDAY_EVENING_SCHEDULE);
+    add("fds", CAPACITY_WEEKEND_SCHEDULE);
+    add("weekend", CAPACITY_WEEKEND_SCHEDULE);
+    return rows.length ? rows : appsScriptRows(payload);
+  }
+
   async function loadAppsScriptAllParkings(city) {
     updateAppsScriptStatus("lendo pontos...", appsScriptToken() ? "ok" : "");
     const data = await fetchAppsScript({ acao: "carregarTodosPontos", cidade: appsScriptCityName(city) });
@@ -1506,7 +1556,7 @@
   async function loadAppsScriptMonitorFile(city) {
     updateAppsScriptStatus("lendo monitor...", appsScriptToken() ? "ok" : "");
     const data = await fetchAppsScript({ acao: "carregarPontos", cidade: appsScriptCityName(city) });
-    const rows = appsScriptRows(data);
+    const rows = appsScriptMonitorRows(data);
     if (!rows.length) throw new Error("Apps Script nao retornou Pontos Monitores para esta cidade");
     return parseMonitorCapacityRows(rows, `${city.name} Apps Script monitor`);
   }
@@ -1531,39 +1581,71 @@
     return { delimiter: ";", headersRaw, headers, records, rows: normalized };
   }
 
+  function capacityParkingsCacheKey(city) {
+    return `${CAPACITY_PARKINGS_CACHE_PREFIX}${city?.key || city?.name || CITY}`;
+  }
+
+  function cachedAllParkings(city) {
+    try {
+      const payload = JSON.parse(localStorage.getItem(capacityParkingsCacheKey(city)) || "null");
+      if (payload && Array.isArray(payload.rows)) return payload;
+    } catch {}
+    return null;
+  }
+
+  function saveCachedAllParkings(city, rows, source) {
+    try {
+      localStorage.setItem(capacityParkingsCacheKey(city), JSON.stringify({ rows, source, savedAt: new Date().toISOString() }));
+    } catch (err) {
+      console.warn("All parkings cache failed", err);
+    }
+  }
+
+  async function fetchGoJetAllParkingsForCity(city) {
+    const cityId = await resolveGoJetCityId(city);
+    if (!cityId) throw new Error(`city_id not found for ${city.name}`);
+    state.capacity.selectedCityId = cityId;
+    if (els.capacityCityId) els.capacityCityId.value = cityId;
+    rememberCityId(city.key, cityId);
+    els.capacityStatusText.textContent = `Loading GoJet parkings for ${city.name}...`;
+    return fetchGoJetParkings(cityId, (loaded, total) => {
+      els.capacityStatusText.textContent = `Loading GoJet parkings for ${city.name}: ${fmtInt(loaded)}${total ? `/${fmtInt(total)}` : ""}`;
+    });
+  }
+
   async function loadSelectedCityParkings() {
     const city = selectedCapacityCity();
     let rows = [];
     let source = "";
     try {
-      const cityId = await resolveGoJetCityId(city);
-      if (!cityId) throw new Error(`city_id not found for ${city.name}`);
-      state.capacity.selectedCityId = cityId;
-      if (els.capacityCityId) els.capacityCityId.value = cityId;
-      rememberCityId(city.key, cityId);
-      els.capacityStatusText.textContent = `Loading GoJet parkings for ${city.name}...`;
-      rows = await fetchGoJetParkings(cityId, (loaded, total) => {
-        els.capacityStatusText.textContent = `Loading GoJet parkings for ${city.name}: ${fmtInt(loaded)}${total ? `/${fmtInt(total)}` : ""}`;
-      });
-      source = `GoJet all parkings: ${city.name}`;
-    } catch (gojetErr) {
-      console.warn("GoJet all parkings failed, trying Apps Script", gojetErr);
+      els.capacityStatusText.textContent = `Lendo Apps Script all parkings para ${city.name}...`;
+      rows = await loadAppsScriptAllParkings(city);
+      source = `Apps Script all parkings: ${city.name}`;
+    } catch (appsErr) {
+      console.warn("Apps Script all parkings failed, trying GoJet", appsErr);
       try {
-        els.capacityStatusText.textContent = `GoJet bloqueado; lendo Apps Script para ${city.name}...`;
-        rows = await loadAppsScriptAllParkings(city);
-        source = `Apps Script all parkings: ${city.name}`;
-      } catch (err) {
-        console.error(err);
-        renderCapacityCompare();
-        if (els.capacityStatusText) els.capacityStatusText.textContent = `All parkings: ${err.message}`;
-        toast(`All parkings: ${err.message}`, true);
-        return;
+        rows = await fetchGoJetAllParkingsForCity(city);
+        source = `GoJet all parkings: ${city.name}`;
+      } catch (gojetErr) {
+        console.warn("GoJet all parkings failed, trying cache", gojetErr);
+        const cached = state.capacity.allParkings.length ? { rows: state.capacity.allParkings, source: state.capacity.allParkingsSource || "already loaded" } : cachedAllParkings(city);
+        if (!cached?.rows?.length) {
+          renderCapacityCompare();
+          if (els.capacityStatusText) els.capacityStatusText.textContent = `All parkings: ${appsErr.message || gojetErr.message}`;
+          toast(`All parkings: ${appsErr.message || gojetErr.message}`, true);
+          return;
+        }
+        rows = cached.rows;
+        source = `${cached.source || "cache"} (cache)`;
       }
     }
 
     try {
-      state.capacity.allParkings = normalizeCapacityParkings(rows);
+      const normalized = normalizeCapacityParkings(rows);
+      if (!normalized.length) throw new Error("all parkings list is empty after parsing");
+      state.capacity.allParkings = normalized;
       state.capacity.allParkingsSource = source;
+      saveCachedAllParkings(city, normalized, source);
       if (city.name === CITY && state.capacity.allParkings.length) state.catalogPoints = state.capacity.allParkings;
       recomputeCapacityCompare();
       renderCapacityCompare();
@@ -1580,29 +1662,29 @@
     let parsed = null;
     let source = "";
     try {
-      const cityId = await resolveGoJetCityId(city);
-      if (!cityId) throw new Error(`city_id not found for ${city.name}`);
-      state.capacity.selectedCityId = cityId;
-      if (els.capacityCityId) els.capacityCityId.value = cityId;
-      rememberCityId(city.key, cityId);
-      els.capacityStatusText.textContent = `Loading monitor rules for ${city.name}...`;
-      const [rulesRaw, scheduleRaw] = await Promise.all([
-        fetchLogisticRows(`${LOGISTIC_BASE}/parking_rules?city_id=${encodeURIComponent(cityId)}`),
-        fetchLogisticJson(`${LOGISTIC_BASE}/schedule?city_id=${encodeURIComponent(cityId)}`).catch(() => null),
-      ]);
-      parsed = createMonitorCapacityFileFromRules(rulesRaw, scheduleRaw, city, state.capacity.allParkings || []);
-      source = `monitor rules: ${city.name}`;
-    } catch (gojetErr) {
-      console.warn("GoJet monitor rules failed, trying Apps Script", gojetErr);
+      els.capacityStatusText.textContent = `Lendo Apps Script monitor para ${city.name}...`;
+      parsed = await loadAppsScriptMonitorFile(city);
+      source = `Apps Script monitor: ${city.name}`;
+    } catch (appsErr) {
+      console.warn("Apps Script monitor failed, trying GoJet", appsErr);
       try {
-        els.capacityStatusText.textContent = `GoJet bloqueado; lendo monitor Apps Script para ${city.name}...`;
-        parsed = await loadAppsScriptMonitorFile(city);
-        source = `Apps Script monitor: ${city.name}`;
-      } catch (err) {
-        console.error(err);
+        const cityId = await resolveGoJetCityId(city);
+        if (!cityId) throw new Error(`city_id not found for ${city.name}`);
+        state.capacity.selectedCityId = cityId;
+        if (els.capacityCityId) els.capacityCityId.value = cityId;
+        rememberCityId(city.key, cityId);
+        els.capacityStatusText.textContent = `Loading monitor rules for ${city.name}...`;
+        const [rulesRaw, scheduleRaw] = await Promise.all([
+          fetchLogisticRows(`${LOGISTIC_BASE}/parking_rules?city_id=${encodeURIComponent(cityId)}`),
+          fetchLogisticJson(`${LOGISTIC_BASE}/schedule?city_id=${encodeURIComponent(cityId)}`).catch(() => null),
+        ]);
+        parsed = createMonitorCapacityFileFromRules(rulesRaw, scheduleRaw, city, state.capacity.allParkings || []);
+        source = `GoJet monitor rules: ${city.name}`;
+      } catch (gojetErr) {
+        console.error(gojetErr);
         renderCapacityCompare();
-        if (els.capacityStatusText) els.capacityStatusText.textContent = `Monitor rules: ${err.message}`;
-        toast(`Monitor rules: ${err.message}`, true);
+        if (els.capacityStatusText) els.capacityStatusText.textContent = `Monitor rules: ${appsErr.message || gojetErr.message}. ????? ????????? Monitor CSV ???????.`;
+        toast(`Monitor rules: ${appsErr.message || gojetErr.message}`, true);
         return;
       }
     }
@@ -1852,11 +1934,11 @@
     const sourceRows = state.capacity.sourceRows || [];
     if (!sourceRows.length) {
       state.capacity.comparison = emptyCapacityComparison(monitorInfo);
-      state.capacity.generated = state.capacity.monitorFile && state.capacity.weekendRows.length ? buildUpdatedMonitorFile({ preview: true }) : null;
+      state.capacity.generated = state.capacity.weekendRows.length ? buildUpdatedMonitorFile({ preview: true }) : null;
       return;
     }
     state.capacity.comparison = compareCapacityRows(sourceRows, monitorInfo.rows, monitorInfo.source);
-    state.capacity.generated = state.capacity.monitorFile ? buildUpdatedMonitorFile({ preview: true }) : null;
+    state.capacity.generated = buildUpdatedMonitorFile({ preview: true });
   }
 
   function emptyCapacityComparison(monitorInfo) {
@@ -1926,7 +2008,7 @@
     });
     const rows = records.map((record) => {
       const row = record.row;
-      const name = firstField(row, ["parking name", "parking", "name", "nome", "estacionamento", "ponto", "title", "hotspot name"]);
+      const name = firstField(row, ["parking name", "parking", "name", "nome", "endereco", "estacionamento", "ponto", "title", "hotspot name"]);
       const schedule = firstField(row, ["schedule name", "schedule", "period", "periodo", "block", "bloco", "turno", "rule name"]);
       const capacity = Math.round(toNumber(firstField(row, ["capacity", "capacidade", "cap", "target", "meta", "expected bikes count", "target bikes count"])));
       return {
@@ -1949,7 +2031,7 @@
   function normalizeMonitorCapacityRows(rows) {
     return (rows || []).map((row) => {
       const raw = row.raw || row;
-      const name = cleanText(row.name || row.nome || row.Nome || row.parkingName || row.parking || raw.parking_name || raw.parkingName || raw.name || raw.nome || raw.Nome || raw.estacionamento || raw.ponto || raw.title || raw.hotspot_name || raw.address || raw.endereco);
+      const name = cleanText(row.name || row.nome || row.Nome || row.parkingName || row.parking || raw.parking_name || raw.parkingName || raw.name || raw.nome || raw.Nome || raw.endereco || raw.estacionamento || raw.ponto || raw.title || raw.hotspot_name || raw.address || raw.endereco);
       const schedule = normalizeCapacitySchedule(row.schedule || row.scheduleName || row.bloco || row.turno || row.periodo || row["per\u00edodo"] || raw.schedule_name || raw.scheduleName || raw.schedule || raw.period || raw.periodo || raw["per\u00edodo"] || raw.block || raw.bloco || raw.turno || raw.rule_name);
       const capacity = Math.round(toNumber(row.capacity ?? row.capacidade ?? row.cap ?? raw.capacity ?? raw.capacidade ?? raw.cap ?? raw.target ?? raw.meta ?? raw.expected_bikes_count ?? raw.expectedBikesCount ?? raw.target_bikes_count ?? raw.targetBikesCount));
       if (!name || !schedule || !Number.isFinite(capacity)) return null;
@@ -2084,9 +2166,10 @@
       return;
     }
     if (!cmp.monitorCount) {
-      els.capacityStatusText.textContent = `${state.capacity.sourceFileName}: monitor capacity is not loaded. Upload Belo Horizonte Monitor CSV.`;
-      els.capacityMissingList.innerHTML = `<div class="compact-item"><strong>Monitor CSV is not loaded</strong><span>The file must contain parking_id, schedule_name and capacity to build the updated monitor CSV.</span></div>`;
-      els.capacityMismatchTable.innerHTML = `<tr><td colspan="4">Waiting for monitor data</td></tr>`;
+      const generatedText = generated ? `new CSV ready: ${fmtInt(generated.outputRecords.length)} rows` : "new CSV is not ready";
+      els.capacityStatusText.textContent = `${state.capacity.sourceFileName}: monitor not loaded; file will be created from all parkings/capacity. ${generatedText}`;
+      els.capacityMissingList.innerHTML = `<div class="compact-item warning-item"><strong>Monitor CSV is optional</strong><span>Upload it if you want to update existing rows. Without it, the site creates a new file from all parkings + weekday/weekend capacity.</span></div>`;
+      els.capacityMismatchTable.innerHTML = `<tr><td colspan="4">No monitor comparison. Export will still include weekday morning/evening, Friday morning/evening and weekend.</td></tr>`;
       return;
     }
 
@@ -2176,20 +2259,32 @@
     const result = buildUpdatedMonitorFile({ preview: false });
     if (!result) return;
     const csv = serializeMonitorFile(result.headersRaw, result.outputRecords.map((record) => record.cells), result.delimiter || ";");
-    const name = `bh-monitor-capacity-updated-${toDateKey(new Date())}.csv`;
+    const name = `capacity-monitor-ready-${selectedCapacityCity().key || "city"}-${toDateKey(new Date())}.csv`;
     downloadBlob(`\ufeff${csv}`, name, "text/csv;charset=utf-8");
-    toast(`Updated monitor CSV: ${fmtInt(result.outputRecords.length)} rows ? updated ${fmtInt(result.updated)} ? added ${fmtInt(result.added)} ? skipped ${fmtInt(result.skipped.length)}`);
+    toast(`Ready CSV: ${fmtInt(result.outputRecords.length)} rows ? updated ${fmtInt(result.updated)} ? added ${fmtInt(result.added)} ? skipped ${fmtInt(result.skipped.length)}`);
+  }
+
+  function createBlankMonitorFile() {
+    const city = selectedCapacityCity();
+    const headersRaw = ["city_id", "city_name", "schedule_id", "schedule_name", "parking_id", "parking_name", "parking_latitude", "parking_longitude", "capacity"];
+    return {
+      delimiter: ";",
+      headersRaw,
+      headers: headersRaw.map(headerKey),
+      records: [],
+      rows: [],
+      synthetic: true,
+      cityId: city.id || "",
+      cityName: city.name || CITY,
+    };
   }
 
   function buildUpdatedMonitorFile({ preview = false } = {}) {
-    const file = state.capacity?.monitorFile;
+    const file = state.capacity?.monitorFile || createBlankMonitorFile();
     const weekdayRows = state.capacity?.sourceRows || [];
-    if (!file || !file.records?.length) {
-      if (!preview) toast("Load Belo Horizonte Monitor CSV first", true);
-      return null;
-    }
-    if (!weekdayRows.length && !(state.capacity?.weekendRows || []).length) {
-      if (!preview) toast("Load Capacity CSV first", true);
+    const weekendRows = state.capacity?.weekendRows || [];
+    if (!weekdayRows.length && !weekendRows.length) {
+      if (!preview) toast("Load weekday or weekend Capacity CSV first", true);
       return null;
     }
 
@@ -2208,7 +2303,7 @@
       scheduleId: col("schedule id", "schedule_id"),
       scheduleName: col("schedule name", "schedule_name", "schedule", "period", "periodo", "block", "bloco", "turno"),
       parkingId: col("parking id", "parking_id", "id"),
-      parkingName: col("parking name", "parking_name", "parking", "name", "nome", "estacionamento", "ponto"),
+      parkingName: col("parking name", "parking_name", "parking", "name", "nome", "endereco", "estacionamento", "ponto"),
       lat: col("parking latitude", "parking_latitude", "latitude", "lat"),
       lng: col("parking longitude", "parking_longitude", "longitude", "lng", "lon"),
       capacity: col("capacity", "capacidade", "cap", "target", "meta"),
@@ -2223,8 +2318,8 @@
     const byParkingSchedule = new Map();
     const parkingDirectory = new Map();
     const selectedCity = selectedCapacityCity();
-    let defaultCityId = selectedCity.id || "";
-    let defaultCityName = selectedCity.name || CITY;
+    let defaultCityId = selectedCity.id || file.cityId || "";
+    let defaultCityName = selectedCity.name || file.cityName || CITY;
 
     outputRecords.forEach((record, index) => {
       const cells = record.cells;
@@ -2256,7 +2351,7 @@
       targets.push({ row, schedule: CAPACITY_FRIDAY_DAY_SCHEDULE, capacity: row.targetDay, source: "friday" });
       targets.push({ row, schedule: CAPACITY_FRIDAY_EVENING_SCHEDULE, capacity: row.targetEvening, source: "friday" });
     });
-    (state.capacity.weekendRows || []).forEach((row) => {
+    weekendRows.forEach((row) => {
       targets.push({ row, schedule: CAPACITY_WEEKEND_SCHEDULE, capacity: row.targetWeekend || row.capTotal || Math.max(row.targetDay || 0, row.targetEvening || 0, 4), source: "weekend" });
     });
 
@@ -2269,10 +2364,6 @@
     targets.forEach((target) => {
       if (!target.capacity || target.capacity < 4) return;
       const scheduleId = scheduleIds.get(target.schedule) || "";
-      if (indices.scheduleId >= 0 && !scheduleId) {
-        skipped.push({ name: target.row.name, schedule: target.schedule, reason: `missing schedule_id for ${target.schedule}` });
-        return;
-      }
       const resolved = resolveCapacityParking(target.row, monitorIndex.items, catalogItems, parkingDirectory);
       const resolvedName = resolved?.name || target.row.name;
       const resolvedKey = resolved?.id || capacityNameKey(resolvedName);
