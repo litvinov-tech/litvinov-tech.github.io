@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   "use strict";
 
   const CITY = "Belo Horizonte";
@@ -17,6 +17,10 @@
   const MANAGERS_CATALOG_CSV_URL = "https://docs.google.com/spreadsheets/d/1_N_bOuh-EsrPBOa_MPG3_sWmscYsCthIlanZB49UDMc/gviz/tq?tqx=out:csv&sheet=Belo%20Horizonte";
   const LOCAL_CATALOG_URL = "./parking_catalog_bh.json";
   const CATALOG_FETCH_TIMEOUT_MS = 8000;
+  const CAPACITY_MATCH_THRESHOLD = 0.84;
+  const CAPACITY_LOW_CONFIDENCE_THRESHOLD = 0.68;
+  const CAPACITY_DAY_SCHEDULE = "weekday-morning";
+  const CAPACITY_EVENING_SCHEDULE = "weekday-evening";
 
   const defaults = {
     lookbackDays: 21,
@@ -34,6 +38,13 @@
     catalogPoints: [],
     analysis: null,
     search: "",
+    capacity: {
+      sourceRows: [],
+      sourceFileName: "",
+      monitorRows: [],
+      monitorFileName: "",
+      comparison: null,
+    },
   };
 
   const monthMap = new Map([
@@ -88,6 +99,9 @@
       "exportHistoryBtn", "importHistoryBtn", "historyInput", "exportCsvBtn", "clearBtn",
       "uploadCount", "uploadList", "kpiRides", "kpiParkings", "kpiDays", "kpiConfidence",
       "planSubtext", "planList", "topSubtext", "topTable", "searchInput", "hourChart", "donorList",
+      "capacityUploadBtn", "capacityInput", "monitorCapacityBtn", "monitorCapacityInput", "capacityExportBtn",
+      "capacityStatusText", "capacityKpiSource", "capacityKpiMatched", "capacityKpiMissing", "capacityKpiProblems",
+      "capacityMissingList", "capacityMismatchTable",
     ].forEach((id) => {
       els[id] = document.getElementById(id);
     });
@@ -158,6 +172,23 @@
       if (file) await importHistory(file);
     });
     els.exportCsvBtn.addEventListener("click", exportPlanCsv);
+    els.capacityUploadBtn?.addEventListener("click", () => els.capacityInput.click());
+    els.capacityInput?.addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (file) await importCapacityCsv(file);
+    });
+    els.monitorCapacityBtn?.addEventListener("click", () => els.monitorCapacityInput.click());
+    els.monitorCapacityInput?.addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (file) await importMonitorCapacityCsv(file);
+    });
+    els.capacityExportBtn?.addEventListener("click", exportCapacityCompareCsv);
+    window.addEventListener("bh-live-monitor-updated", () => {
+      recomputeCapacityCompare();
+      renderCapacityCompare();
+    });
     els.clearBtn.addEventListener("click", clearHistory);
   }
 
@@ -1013,6 +1044,8 @@
     renderTopTable();
     renderHourChart();
     renderDonors();
+    recomputeCapacityCompare();
+    renderCapacityCompare();
     renderIcons();
   }
 
@@ -1184,6 +1217,403 @@
     }
   }
 
+
+  async function importCapacityCsv(file) {
+    try {
+      const text = await file.text();
+      const rows = parseCapacityTopRows(text);
+      state.capacity.sourceRows = rows;
+      state.capacity.sourceFileName = file.name;
+      recomputeCapacityCompare();
+      renderCapacityCompare();
+      toast(`${file.name}: capacity 4+ ${fmtInt(rows.length)}`);
+    } catch (err) {
+      console.error(err);
+      toast(`${file.name}: ${err.message}`, true);
+    }
+  }
+
+  async function importMonitorCapacityCsv(file) {
+    try {
+      const text = await file.text();
+      const rows = parseMonitorCapacityRows(text);
+      state.capacity.monitorRows = rows;
+      state.capacity.monitorFileName = file.name;
+      recomputeCapacityCompare();
+      renderCapacityCompare();
+      toast(`${file.name}: monitor rules ${fmtInt(rows.length)}`);
+    } catch (err) {
+      console.error(err);
+      toast(`${file.name}: ${err.message}`, true);
+    }
+  }
+
+  function recomputeCapacityCompare() {
+    if (!state.capacity) return;
+    const monitorInfo = getMonitorCapacityRows();
+    const sourceRows = state.capacity.sourceRows || [];
+    if (!sourceRows.length) {
+      state.capacity.comparison = emptyCapacityComparison(monitorInfo);
+      return;
+    }
+    state.capacity.comparison = compareCapacityRows(sourceRows, monitorInfo.rows, monitorInfo.source);
+  }
+
+  function emptyCapacityComparison(monitorInfo) {
+    return {
+      sourceCount: state.capacity?.sourceRows?.length || 0,
+      monitorCount: monitorInfo.rows.length,
+      monitorSource: monitorInfo.source,
+      matchedCount: 0,
+      missing: [],
+      possible: [],
+      mismatches: [],
+      mismatchGroups: [],
+      capacityDiffCount: 0,
+      missingScheduleCount: 0,
+    };
+  }
+
+  function getMonitorCapacityRows() {
+    if (state.capacity?.monitorRows?.length) {
+      return { rows: state.capacity.monitorRows, source: `CSV monitor: ${state.capacity.monitorFileName}` };
+    }
+    const liveState = window.BHLiveMonitor?.getState?.();
+    const liveRows = normalizeMonitorCapacityRows(liveState?.rules || []);
+    if (liveRows.length) return { rows: liveRows, source: "Live Managers Map" };
+    return { rows: [], source: "monitor не загружен" };
+  }
+
+  function parseCapacityTopRows(text) {
+    const matrix = parseDelimitedMatrix(text, detectDelimiter(text));
+    if (!matrix.length) throw new Error("CSV пустой");
+    matrix.shift();
+    const rows = matrix.map((row) => {
+      const name = cleanText(row[1]);
+      const capTotal = Math.round(toNumber(row[6]));
+      const capDayRaw = Math.round(toNumber(row[7]));
+      const capEveningRaw = Math.round(toNumber(row[8]));
+      if (!name || Math.max(capTotal, capDayRaw, capEveningRaw) < 4) return null;
+      return {
+        rank: cleanText(row[0]),
+        name,
+        key: capacityNameKey(name),
+        startsPerDay: cleanText(row[2]),
+        finishesPerDay: cleanText(row[3]),
+        balance: cleanText(row[4]),
+        zoneType: cleanText(row[9]),
+        capTotal,
+        targetDay: Math.max(4, capDayRaw),
+        targetEvening: Math.max(4, capEveningRaw),
+      };
+    }).filter(Boolean);
+    if (!rows.length) throw new Error("не нашел строк capacity 4+");
+    return rows;
+  }
+
+  function parseMonitorCapacityRows(text) {
+    const delimiter = detectDelimiter(text);
+    const matrix = parseDelimitedMatrix(text, delimiter);
+    if (!matrix.length) throw new Error("CSV monitor пустой");
+    const headers = matrix.shift().map(headerKey);
+    const rows = matrix.map((items) => {
+      const row = {};
+      headers.forEach((header, index) => { row[header] = items[index] ?? ""; });
+      const name = firstField(row, ["parking name", "parking", "name", "title", "hotspot name"]);
+      const schedule = firstField(row, ["schedule name", "schedule", "period", "block", "rule name"]);
+      const capacity = Math.round(toNumber(firstField(row, ["capacity", "target", "expected bikes count", "target bikes count"])));
+      return { name, schedule, capacity, id: firstField(row, ["parking id", "id"]), raw: row };
+    });
+    const normalized = normalizeMonitorCapacityRows(rows);
+    if (!normalized.length) throw new Error("не нашел parking_name/schedule_name/capacity в monitor CSV");
+    return normalized;
+  }
+
+  function normalizeMonitorCapacityRows(rows) {
+    return (rows || []).map((row) => {
+      const raw = row.raw || row;
+      const name = cleanText(row.name || row.parkingName || row.parking || raw.parking_name || raw.parkingName || raw.name || raw.title || raw.hotspot_name || raw.address);
+      const schedule = normalizeCapacitySchedule(row.schedule || row.scheduleName || raw.schedule_name || raw.scheduleName || raw.schedule || raw.period || raw.block || raw.rule_name);
+      const capacity = Math.round(toNumber(row.capacity ?? raw.capacity ?? raw.target ?? raw.expected_bikes_count ?? raw.expectedBikesCount ?? raw.target_bikes_count ?? raw.targetBikesCount));
+      if (!name || !schedule || !Number.isFinite(capacity)) return null;
+      return {
+        id: cleanText(row.id || row.parkingId || raw.parking_id || raw.parkingId || raw.id),
+        name,
+        key: capacityNameKey(name),
+        schedule,
+        capacity,
+      };
+    }).filter(Boolean);
+  }
+
+  function compareCapacityRows(sourceRows, monitorRows, monitorSource) {
+    const monitorIndex = buildMonitorCapacityIndex(monitorRows);
+    const missing = [];
+    const possible = [];
+    const matched = [];
+    const mismatches = [];
+
+    sourceRows.forEach((row) => {
+      const best = bestMonitorCapacityMatch(row, monitorIndex.items);
+      const base = {
+        rank: row.rank,
+        parking: row.name,
+        targetDay: row.targetDay,
+        targetEvening: row.targetEvening,
+        startsPerDay: row.startsPerDay,
+        zoneType: row.zoneType,
+        bestMonitor: best?.item?.name || "",
+        matchScore: best ? Number(best.score.toFixed(3)) : 0,
+      };
+      if (!best || best.score < CAPACITY_MATCH_THRESHOLD) {
+        if (best && best.score >= CAPACITY_LOW_CONFIDENCE_THRESHOLD) possible.push({ ...base, kind: "check name" });
+        else missing.push({ ...base, kind: "missing" });
+        return;
+      }
+
+      const item = best.item;
+      matched.push({ row, item, score: best.score });
+      [
+        { schedule: CAPACITY_DAY_SCHEDULE, expected: row.targetDay, label: "weekday morning" },
+        { schedule: CAPACITY_EVENING_SCHEDULE, expected: row.targetEvening, label: "weekday evening" },
+      ].forEach(({ schedule, expected, label }) => {
+        const actual = item.capacities[schedule];
+        if (actual == null) {
+          mismatches.push({ ...base, monitorParking: item.name, schedule, label, expected, actual: "", difference: "", problem: "missing schedule" });
+        } else if (Number(actual) !== Number(expected)) {
+          mismatches.push({ ...base, monitorParking: item.name, schedule, label, expected, actual, difference: Number(actual) - Number(expected), problem: "capacity differs" });
+        }
+      });
+    });
+
+    const groups = groupCapacityMismatches(mismatches);
+    return {
+      sourceCount: sourceRows.length,
+      monitorCount: monitorRows.length,
+      monitorSource,
+      matchedCount: matched.length,
+      missing,
+      possible,
+      mismatches,
+      mismatchGroups: groups,
+      capacityDiffCount: mismatches.filter((row) => row.problem === "capacity differs").length,
+      missingScheduleCount: mismatches.filter((row) => row.problem === "missing schedule").length,
+    };
+  }
+
+  function buildMonitorCapacityIndex(rows) {
+    const byKey = new Map();
+    rows.forEach((row) => {
+      if (!row.key || !row.schedule) return;
+      const item = byKey.get(row.key) || { key: row.key, name: row.name, id: row.id, capacities: {}, rows: [] };
+      item.name = item.name || row.name;
+      item.capacities[row.schedule] = row.capacity;
+      item.rows.push(row);
+      byKey.set(row.key, item);
+    });
+    return { items: [...byKey.values()] };
+  }
+
+  function bestMonitorCapacityMatch(sourceRow, monitorItems) {
+    let best = null;
+    for (const item of monitorItems) {
+      const score = capacityNameScore(sourceRow.key, item.key);
+      if (!best || score > best.score) best = { item, score };
+    }
+    return best && best.score > 0 ? best : null;
+  }
+
+  function groupCapacityMismatches(rows) {
+    const byParking = new Map();
+    rows.forEach((row) => {
+      const key = `${row.rank}|${row.monitorParking || row.parking}`;
+      const group = byParking.get(key) || {
+        rank: row.rank,
+        parking: row.monitorParking || row.parking,
+        sourceParking: row.parking,
+        matchScore: row.matchScore,
+        day: null,
+        evening: null,
+      };
+      if (row.schedule === CAPACITY_DAY_SCHEDULE) group.day = row;
+      if (row.schedule === CAPACITY_EVENING_SCHEDULE) group.evening = row;
+      byParking.set(key, group);
+    });
+    return [...byParking.values()].sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999));
+  }
+
+  function renderCapacityCompare() {
+    if (!els.capacityStatusText) return;
+    const cmp = state.capacity?.comparison || emptyCapacityComparison(getMonitorCapacityRows());
+    const sourceRows = state.capacity?.sourceRows || [];
+    els.capacityKpiSource.textContent = fmtInt(cmp.sourceCount || sourceRows.length);
+    els.capacityKpiMatched.textContent = fmtInt(cmp.matchedCount || 0);
+    els.capacityKpiMissing.textContent = fmtInt((cmp.missing?.length || 0) + (cmp.possible?.length || 0));
+    els.capacityKpiProblems.textContent = fmtInt(cmp.mismatches?.length || 0);
+
+    if (!sourceRows.length) {
+      els.capacityStatusText.textContent = "Загрузи capacity_top CSV. Monitor можно взять через Live full или Monitor CSV.";
+      els.capacityMissingList.innerHTML = `<div class="compact-item"><strong>Capacity CSV не загружен</strong><span>Сюда подойдет файл capacity_top300 с колонками 00-12 и 12-00.</span></div>`;
+      els.capacityMismatchTable.innerHTML = `<tr><td colspan="4">Нет сравнения</td></tr>`;
+      return;
+    }
+    if (!cmp.monitorCount) {
+      els.capacityStatusText.textContent = `${state.capacity.sourceFileName}: нет monitor capacity. Нажми Live full или загрузи Monitor CSV.`;
+      els.capacityMissingList.innerHTML = `<div class="compact-item"><strong>Monitor capacity не загружен</strong><span>Нужны rules с parking_name, schedule_name и capacity.</span></div>`;
+      els.capacityMismatchTable.innerHTML = `<tr><td colspan="4">Жду monitor data</td></tr>`;
+      return;
+    }
+
+    els.capacityStatusText.textContent = `${state.capacity.sourceFileName} · ${cmp.monitorSource} · matched ${fmtInt(cmp.matchedCount)}/${fmtInt(cmp.sourceCount)}`;
+    renderCapacityMissing(cmp);
+    renderCapacityMismatches(cmp);
+  }
+
+  function renderCapacityMissing(cmp) {
+    const rows = [
+      ...(cmp.missing || []).map((row) => ({ ...row, title: "Нет в monitor" })),
+      ...(cmp.possible || []).map((row) => ({ ...row, title: "Проверить имя" })),
+    ];
+    if (!rows.length) {
+      els.capacityMissingList.innerHTML = `<div class="compact-item"><strong>Все top capacity найдены</strong><span>Неуверенных совпадений нет.</span></div>`;
+      return;
+    }
+    els.capacityMissingList.innerHTML = rows.slice(0, 18).map((row) => `
+      <div class="compact-item">
+        <strong>${esc(row.rank ? `${row.rank}. ` : "")}${esc(row.parking)}</strong>
+        <span>${esc(row.title)} · утро ${fmtInt(row.targetDay)} · вечер ${fmtInt(row.targetEvening)} · стартов/день ${esc(row.startsPerDay || "N/D")}</span>
+        ${row.bestMonitor ? `<span>Ближайшее: ${esc(row.bestMonitor)} · score ${row.matchScore}</span>` : ""}
+      </div>
+    `).join("");
+  }
+
+  function renderCapacityMismatches(cmp) {
+    const groups = cmp.mismatchGroups || [];
+    if (!groups.length) {
+      els.capacityMismatchTable.innerHTML = `<tr><td colspan="4">Capacity совпадает по будним блокам</td></tr>`;
+      return;
+    }
+    els.capacityMismatchTable.innerHTML = groups.slice(0, 80).map((group) => `
+      <tr>
+        <td class="rank">${esc(group.rank)}</td>
+        <td><strong class="parking-name">${esc(group.parking)}</strong><span class="subline">source: ${esc(group.sourceParking)}</span></td>
+        <td>${capacityProblemCell(group.day)}</td>
+        <td>${capacityProblemCell(group.evening)}</td>
+      </tr>
+    `).join("");
+  }
+
+  function capacityProblemCell(row) {
+    if (!row) return `<span class="capacity-ok">OK</span>`;
+    const cls = row.problem === "missing schedule" ? "capacity-missing" : "capacity-diff";
+    const text = row.problem === "missing schedule" ? `нет -> ${row.expected}` : `${row.actual} -> ${row.expected}`;
+    return `<span class="${cls}">${esc(text)}</span><span class="subline">${esc(row.problem)}</span>`;
+  }
+
+  function exportCapacityCompareCsv() {
+    const cmp = state.capacity?.comparison;
+    if (!cmp || !state.capacity.sourceRows.length) {
+      toast("Сначала загрузи capacity CSV", true);
+      return;
+    }
+    const rows = [["type", "rank", "parking", "monitor_parking", "schedule", "expected", "monitor", "difference", "starts_per_day", "match_score", "problem"]];
+    (cmp.missing || []).forEach((row) => rows.push(["missing", row.rank, row.parking, row.bestMonitor, "", row.targetDay + "/" + row.targetEvening, "", "", row.startsPerDay, row.matchScore, "not found"]));
+    (cmp.possible || []).forEach((row) => rows.push(["check_name", row.rank, row.parking, row.bestMonitor, "", row.targetDay + "/" + row.targetEvening, "", "", row.startsPerDay, row.matchScore, "low confidence"]));
+    (cmp.mismatches || []).forEach((row) => rows.push(["mismatch", row.rank, row.parking, row.monitorParking, row.schedule, row.expected, row.actual, row.difference, row.startsPerDay, row.matchScore, row.problem]));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    downloadBlob(csv, `bh-capacity-compare-${toDateKey(new Date())}.csv`, "text/csv;charset=utf-8");
+  }
+
+  function parseDelimitedMatrix(text, delimiter) {
+    const clean = String(text || "").replace(/^\ufeff/, "");
+    const matrix = [];
+    let row = [];
+    let cell = "";
+    let quoted = false;
+    for (let i = 0; i < clean.length; i += 1) {
+      const char = clean[i];
+      if (quoted) {
+        if (char === '"' && clean[i + 1] === '"') { cell += '"'; i += 1; }
+        else if (char === '"') quoted = false;
+        else cell += char;
+      } else if (char === '"') quoted = true;
+      else if (char === delimiter) { row.push(cell); cell = ""; }
+      else if (char === "\n") { row.push(cell); matrix.push(row); row = []; cell = ""; }
+      else if (char !== "\r") cell += char;
+    }
+    if (cell || row.length) { row.push(cell); matrix.push(row); }
+    return matrix.filter((items) => items.some((item) => cleanText(item)));
+  }
+
+  function detectDelimiter(text) {
+    const firstLine = String(text || "").split(/\r?\n/).find((line) => cleanText(line)) || "";
+    const semicolons = (firstLine.match(/;/g) || []).length;
+    const commas = (firstLine.match(/,/g) || []).length;
+    return semicolons > commas ? ";" : ",";
+  }
+
+  function firstField(row, names) {
+    for (const name of names) {
+      const value = row[headerKey(name)];
+      if (cleanText(value)) return cleanText(value);
+    }
+    return "";
+  }
+
+  function headerKey(value) {
+    return normalizeSearch(value).replace(/_/g, " ");
+  }
+
+  function normalizeCapacitySchedule(value) {
+    const text = normalizeSearch(value).replace(/_/g, " ");
+    if (!text) return "";
+    const friday = /\b(friday|sexta)\b/.test(text);
+    const evening = /\b(evening|noite|tarde)\b/.test(text) || text.includes("12 00");
+    if (/\b(weekend|fim de semana|sabado|domingo)\b/.test(text)) return "weekend";
+    if (friday && evening) return "weekday-evening-friday";
+    if (friday) return "weekday-morning-friday";
+    if (evening) return "weekday-evening";
+    if (/\b(morning|manha|day|dia)\b/.test(text) || text.includes("00 12")) return "weekday-morning";
+    return cleanText(value);
+  }
+
+  function capacityNameKey(value) {
+    return normalizeSearch(value)
+      .replace(/\b30\d{3}\s?\d{3}\b/g, " ")
+      .replace(/\bbelo horizonte\b|\bmg\b|\bs n\b/g, " ")
+      .replace(/\br\b/g, " rua ")
+      .replace(/\bav\b/g, " avenida ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function capacityNameScore(a, b) {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const aTokens = capacityTokens(a);
+    const bTokens = capacityTokens(b);
+    if (!aTokens.length || !bTokens.length) return 0;
+    const bSet = new Set(bTokens);
+    const common = aTokens.filter((token) => bSet.has(token)).length;
+    if (!common) return 0;
+    const dice = (2 * common) / (aTokens.length + bTokens.length);
+    const cover = common / Math.min(aTokens.length, bTokens.length);
+    const aSet = new Set(aTokens);
+    const sourceSubset = aTokens.every((token) => bSet.has(token));
+    const targetSubset = bTokens.every((token) => aSet.has(token));
+    let score = dice * 0.65 + cover * 0.35;
+    if (sourceSubset || targetSubset) score = Math.max(score, common === 1 ? 0.86 : 0.9);
+    if (a.includes(b) || b.includes(a)) {
+      const penalty = Math.abs(a.length - b.length) / Math.max(a.length, b.length);
+      score = Math.max(score, 0.92 - penalty * 0.12);
+    }
+    return Math.min(1, score);
+  }
+
+  function capacityTokens(value) {
+    const stop = new Set(["rua", "avenida", "av", "r", "praca", "da", "de", "do", "dos", "das", "e", "centro", "funcionarios"]);
+    return capacityNameKey(value).split(" ").filter((token) => token.length > 1 && !stop.has(token));
+  }
   function exportPlanCsv() {
     const analysis = state.analysis;
     const rows = [

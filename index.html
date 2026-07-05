@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="utf-8">
@@ -138,6 +138,59 @@
             <div class="plan-list" id="planList"></div>
           </section>
 
+
+          <section class="panel capacity-panel" id="capacityPanel">
+            <div class="panel-head">
+              <div>
+                <h2>Capacity Monitor</h2>
+                <span id="capacityStatusText">Загрузи capacity CSV для сравнения с монитором</span>
+              </div>
+              <div class="panel-actions">
+                <button id="capacityUploadBtn" type="button">
+                  <i data-lucide="upload"></i>
+                  <span>Capacity CSV</span>
+                </button>
+                <input id="capacityInput" type="file" accept=".csv" hidden>
+                <button id="monitorCapacityBtn" type="button">
+                  <i data-lucide="database"></i>
+                  <span>Monitor CSV</span>
+                </button>
+                <input id="monitorCapacityInput" type="file" accept=".csv" hidden>
+                <button id="capacityExportBtn" type="button">
+                  <i data-lucide="download"></i>
+                  <span>CSV</span>
+                </button>
+              </div>
+            </div>
+            <div class="capacity-kpis">
+              <div><strong id="capacityKpiSource">0</strong><span>capacity 4+</span></div>
+              <div><strong id="capacityKpiMatched">0</strong><span>найдено</span></div>
+              <div><strong id="capacityKpiMissing">0</strong><span>нет в monitor</span></div>
+              <div><strong id="capacityKpiProblems">0</strong><span>правки capacity</span></div>
+            </div>
+            <div class="capacity-grid">
+              <div>
+                <h3>Нет в monitor / проверить имя</h3>
+                <div id="capacityMissingList" class="compact-list"></div>
+              </div>
+              <div>
+                <h3>Capacity по будням</h3>
+                <div class="table-wrap compact-table-wrap">
+                  <table class="capacity-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Парковка</th>
+                        <th>Утро</th>
+                        <th>Вечер</th>
+                      </tr>
+                    </thead>
+                    <tbody id="capacityMismatchTable"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
           <section class="content-grid">
             <div class="panel top-panel">
               <div class="panel-head">
@@ -194,5 +247,3 @@
     </template>
   </body>
 </html>
-
-

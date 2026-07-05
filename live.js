@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   "use strict";
 
   const CITY_ID = "690388c7ad28bbbf340407e0";
@@ -74,6 +74,7 @@
         fetchJson(`${BASE}/schedule?city_id=${encodeURIComponent(CITY_ID)}`),
       ]);
       buildLive(parkingsRaw, bikesRaw, rulesRaw, schedule);
+      window.dispatchEvent(new CustomEvent("bh-live-monitor-updated"));
       render();
       updateMap();
       status(`Live загружен: ${state.parkings.length} parkings, ${state.bikes.length} bikes, ${state.idle48.length} idle 48h+.`);
@@ -137,9 +138,16 @@
     const name = txt(x.name || x.title || x.parking_name || x.parkingName || x.address || x.id);
     const key = norm(name || x.parking_id || x.parkingId || x.id);
     if (!key) return null;
-    return { id: txt(x.id || x._id || x.parking_id || x.parkingId || name), name, key, monitor: bool(x.monitor ?? x.is_monitor ?? x.isMonitor ?? x.monitored ?? x.priority ?? x.is_priority ?? x.top), raw: x };
+    return {
+      id: txt(x.id || x._id || x.parking_id || x.parkingId || name),
+      name,
+      key,
+      schedule: txt(x.schedule_name || x.scheduleName || x.schedule || x.period || x.block || x.rule_name),
+      capacity: num(x.capacity ?? x.target ?? x.expected_bikes_count ?? x.expectedBikesCount ?? x.target_bikes_count ?? x.targetBikesCount),
+      monitor: bool(x.monitor ?? x.is_monitor ?? x.isMonitor ?? x.monitored ?? x.priority ?? x.is_priority ?? x.top),
+      raw: x,
+    };
   }
-
   function parkingNorm(x, monitorKeys) {
     const pt = point(x);
     const name = txt(x.name || x.title || x.shortName || x.address || x.id);
@@ -295,4 +303,5 @@
   function signed(v) { return v > 0 ? `+${v}` : String(v || 0); }
   function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   function hav(lat1, lng1, lat2, lng2) { const r = Math.PI / 180, dLat = (lat2 - lat1) * r, dLng = (lng2 - lng1) * r; const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLng / 2) ** 2; return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); }
+  window.BHLiveMonitor = { getState: () => state, load: loadManagersMapService };
 })();

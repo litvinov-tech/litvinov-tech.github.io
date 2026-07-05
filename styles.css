@@ -669,6 +669,112 @@ tr:last-child td {
   height: 24px;
 }
 
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.panel-actions button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.capacity-panel {
+  margin-top: 12px;
+}
+
+.capacity-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.capacity-kpis div {
+  min-height: 70px;
+  padding: 10px;
+  border: 1px solid #dfe8ef;
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.capacity-kpis strong,
+.capacity-kpis span {
+  display: block;
+}
+
+.capacity-kpis strong {
+  font-size: 25px;
+  line-height: 1.05;
+}
+
+.capacity-kpis span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.capacity-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr);
+  gap: 12px;
+  margin-top: 12px;
+  align-items: start;
+}
+
+
+.capacity-grid > * {
+  min-width: 0;
+}
+.compact-table-wrap {
+  max-height: 430px;
+}
+
+.capacity-table {
+  min-width: 660px;
+}
+
+.capacity-diff,
+.capacity-missing,
+.capacity-ok {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.capacity-diff {
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  background: #fff7ed;
+}
+
+.capacity-missing {
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.capacity-ok {
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  background: #f0fdf4;
+}
+
 .toast-stack {
   position: fixed;
   right: 16px;
@@ -696,7 +802,7 @@ tr:last-child td {
 
 @media (max-width: 1120px) {
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .control-panel {
@@ -718,8 +824,9 @@ tr:last-child td {
     grid-column: 1 / -1;
   }
 
-  .content-grid {
-    grid-template-columns: 1fr;
+  .content-grid,
+  .capacity-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -731,8 +838,9 @@ tr:last-child td {
 
   .control-panel,
   .kpi-grid,
+  .capacity-kpis,
   .plan-list {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .panel-head {
@@ -745,7 +853,7 @@ tr:last-child td {
   }
 
   .tools-panel {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .hour-chart {
