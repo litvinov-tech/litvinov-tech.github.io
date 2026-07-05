@@ -1,0 +1,278 @@
+{
+ "brasilia": {
+  "areaId": "6787b812c168def1b2c6d143",
+  "city": "Brasilia",
+  "count": 2571,
+  "file": "6787b812c168def1b2c6d143.json"
+ },
+ "belo horizonte": {
+  "areaId": "690388c7ad28bbbf340407e0",
+  "city": "Belo Horizonte",
+  "count": 1309,
+  "file": "690388c7ad28bbbf340407e0.json"
+ },
+ "natal": {
+  "areaId": "68b04f07be72115f4f51278a",
+  "city": "Natal",
+  "count": 1147,
+  "file": "68b04f07be72115f4f51278a.json"
+ },
+ "sao jose dos campos": {
+  "areaId": "667dbf4b383bbe3b572dc978",
+  "city": "Sao Jose dos Campos",
+  "count": 1123,
+  "file": "667dbf4b383bbe3b572dc978.json"
+ },
+ "vila velha": {
+  "areaId": "661d34656172ab96d2cfb8a3",
+  "city": "Vila Velha",
+  "count": 1057,
+  "file": "661d34656172ab96d2cfb8a3.json"
+ },
+ "porto alegre": {
+  "areaId": "65f6b36adb4383cfd4cbaf11",
+  "city": "Porto Alegre",
+  "count": 969,
+  "file": "65f6b36adb4383cfd4cbaf11.json"
+ },
+ "londrina": {
+  "areaId": "673770fbaa587fb1f6cf351b",
+  "city": "Londrina",
+  "count": 923,
+  "file": "673770fbaa587fb1f6cf351b.json"
+ },
+ "sao paulo": {
+  "areaId": "669f89ebd06775867c31b984",
+  "city": "Sao Paulo",
+  "count": 875,
+  "file": "669f89ebd06775867c31b984.json"
+ },
+ "florianopolis": {
+  "areaId": "648072932d3187231af24c3c",
+  "city": "Florianópolis",
+  "count": 867,
+  "file": "648072932d3187231af24c3c.json"
+ },
+ "serra": {
+  "areaId": "695fc08a2479703707152316",
+  "city": "Serra",
+  "count": 817,
+  "file": "695fc08a2479703707152316.json"
+ },
+ "sorocaba": {
+  "areaId": "667ea8519074fc08bfa944c8",
+  "city": "Sorocaba",
+  "count": 769,
+  "file": "667ea8519074fc08bfa944c8.json"
+ },
+ "florianopolis (ingleses)": {
+  "areaId": "694cec16f73437e8d29ab822",
+  "city": "Florianopolis (Ingleses)",
+  "count": 727,
+  "file": "694cec16f73437e8d29ab822.json"
+ },
+ "guarapari": {
+  "areaId": "68427ddd6a7c4e0a60fe3303",
+  "city": "Guarapari",
+  "count": 718,
+  "file": "68427ddd6a7c4e0a60fe3303.json"
+ },
+ "aracaju": {
+  "areaId": "67d2d76c77471d68d3c4be6e",
+  "city": "Aracaju",
+  "count": 689,
+  "file": "67d2d76c77471d68d3c4be6e.json"
+ },
+ "belem": {
+  "areaId": "68878e516923b6b7474e7bad",
+  "city": "Belem",
+  "count": 670,
+  "file": "68878e516923b6b7474e7bad.json"
+ },
+ "balneario-camboriu": {
+  "areaId": "659410d8ec1dc43990626c21",
+  "city": "Balneário-Camboriú ",
+  "count": 590,
+  "file": "659410d8ec1dc43990626c21.json"
+ },
+ "joinville": {
+  "areaId": "693046569305057d06bedfd8",
+  "city": "Joinville",
+  "count": 557,
+  "file": "693046569305057d06bedfd8.json"
+ },
+ "fortaleza": {
+  "areaId": "66ee85c1a70885bbb9a4787a",
+  "city": "Fortaleza",
+  "count": 545,
+  "file": "66ee85c1a70885bbb9a4787a.json"
+ },
+ "maceio": {
+  "areaId": "66faae66cd18349215c90187",
+  "city": "Maceio",
+  "count": 458,
+  "file": "66faae66cd18349215c90187.json"
+ },
+ "salvador": {
+  "areaId": "6763d2ab7e6826ba04f4cafa",
+  "city": "Salvador",
+  "count": 429,
+  "file": "6763d2ab7e6826ba04f4cafa.json"
+ },
+ "palhoca": {
+  "areaId": "691760032219899d17be3885",
+  "city": "Palhoça",
+  "count": 410,
+  "file": "691760032219899d17be3885.json"
+ },
+ "guaruja": {
+  "areaId": "65082f98c873db1c2687f981",
+  "city": "Guaruja",
+  "count": 391,
+  "file": "65082f98c873db1c2687f981.json"
+ },
+ "blumenau": {
+  "areaId": "651494c07a00d708ac176e8f",
+  "city": "Blumenau",
+  "count": 383,
+  "file": "651494c07a00d708ac176e8f.json"
+ },
+ "itajai": {
+  "areaId": "651530cd0128f8c4343e1065",
+  "city": "Itajaí",
+  "count": 345,
+  "file": "651530cd0128f8c4343e1065.json"
+ },
+ "santo andre": {
+  "areaId": "67ab79f4cd4d3cbb07a0c02e",
+  "city": "Santo André",
+  "count": 338,
+  "file": "67ab79f4cd4d3cbb07a0c02e.json"
+ },
+ "praia grande": {
+  "areaId": "65083486c873db1c26929812",
+  "city": "Praia Grande",
+  "count": 306,
+  "file": "65083486c873db1c26929812.json"
+ },
+ "ubatuba": {
+  "areaId": "68fbd43f4250726375e39777",
+  "city": "Ubatuba",
+  "count": 279,
+  "file": "68fbd43f4250726375e39777.json"
+ },
+ "torres": {
+  "areaId": "678270969c1d0592907ac12e",
+  "city": "Torres",
+  "count": 272,
+  "file": "678270969c1d0592907ac12e.json"
+ },
+ "ilheus": {
+  "areaId": "694937516237fb6f62b7bdf5",
+  "city": "Ilhéus",
+  "count": 268,
+  "file": "694937516237fb6f62b7bdf5.json"
+ },
+ "florianopolis (campeche)": {
+  "areaId": "694cec30f73437e8d29ac592",
+  "city": "Florianopolis (Campeche)",
+  "count": 254,
+  "file": "694cec30f73437e8d29ac592.json"
+ },
+ "novo hamburgo": {
+  "areaId": "67a5a7171825e70d1c89701b",
+  "city": "Novo Hamburgo",
+  "count": 249,
+  "file": "67a5a7171825e70d1c89701b.json"
+ },
+ "campinas": {
+  "areaId": "66b663bb5a4a81d5aad426f6",
+  "city": "Campinas",
+  "count": 246,
+  "file": "66b663bb5a4a81d5aad426f6.json"
+ },
+ "guaratuba": {
+  "areaId": "692601c15135ad34734ea005",
+  "city": "Guaratuba",
+  "count": 221,
+  "file": "692601c15135ad34734ea005.json"
+ },
+ "curitiba": {
+  "areaId": "655636e16e2c3042b5abbc9e",
+  "city": "Curitiba",
+  "count": 217,
+  "file": "655636e16e2c3042b5abbc9e.json"
+ },
+ "bertioga": {
+  "areaId": "66dde6b6762fad800fea4d2b",
+  "city": "Bertioga",
+  "count": 188,
+  "file": "66dde6b6762fad800fea4d2b.json"
+ },
+ "porto belo": {
+  "areaId": "697aee8e4821c38bfbeca550",
+  "city": "Pôrto Belo",
+  "count": 188,
+  "file": "697aee8e4821c38bfbeca550.json"
+ },
+ "сaraguatatuba": {
+  "areaId": "65e07af95847eddefbc54984",
+  "city": "Сaraguatatuba",
+  "count": 188,
+  "file": "65e07af95847eddefbc54984.json"
+ },
+ "ilhabela": {
+  "areaId": "68aef97ce618bd3b8e4f2248",
+  "city": "Ilhabela",
+  "count": 176,
+  "file": "68aef97ce618bd3b8e4f2248.json"
+ },
+ "anchieta": {
+  "areaId": "692aff853460cff7c27b1cc4",
+  "city": "Anchieta",
+  "count": 165,
+  "file": "692aff853460cff7c27b1cc4.json"
+ },
+ "florianopolis (centro)": {
+  "areaId": "69e244658610423fc3fb9697",
+  "city": "Florianopolis (Centro)",
+  "count": 131,
+  "file": "69e244658610423fc3fb9697.json"
+ },
+ "peruibe": {
+  "areaId": "69c80e50bd14b018d111f1ff",
+  "city": "Peruíbe",
+  "count": 114,
+  "file": "69c80e50bd14b018d111f1ff.json"
+ },
+ "gramado": {
+  "areaId": "670ff541d952fd49918cfa02",
+  "city": "Gramado",
+  "count": 102,
+  "file": "670ff541d952fd49918cfa02.json"
+ },
+ "itanhaem": {
+  "areaId": "691daaddbd6bf79e82c06895",
+  "city": "Itanhaem",
+  "count": 100,
+  "file": "691daaddbd6bf79e82c06895.json"
+ },
+ "recife": {
+  "areaId": "66faadb8cd18349215c874c4",
+  "city": "Recife",
+  "count": 97,
+  "file": "66faadb8cd18349215c874c4.json"
+ },
+ "campos do jordao": {
+  "areaId": "690c9879d419e6cd63b5e4df",
+  "city": "Campos do Jordão",
+  "count": 62,
+  "file": "690c9879d419e6cd63b5e4df.json"
+ },
+ "matinhos": {
+  "areaId": "6903959e4a51c49c7a0f7023",
+  "city": "Matinhos",
+  "count": 6,
+  "file": "6903959e4a51c49c7a0f7023.json"
+ }
+}

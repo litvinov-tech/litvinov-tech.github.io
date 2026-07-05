@@ -48,7 +48,7 @@ exports.handler = async (event) => {
   try {
     const payload = JSON.parse(event.body || "{}");
     const acao = String(payload.acao || "");
-    const allowed = new Set(["carregarTodosPontos", "carregarPontos", "listarConfigs"]);
+    const allowed = new Set(["carregarTodosPontos", "carregarPontos", "listarConfigs", "listarCidadesGoJet", "buscarPontosGoJet", "salvarTodosPontos"]);
     if (!allowed.has(acao)) return json(400, { ok: false, msg: "Unsupported acao" });
 
     const call = async (forceLogin = false) => postAppsScript({

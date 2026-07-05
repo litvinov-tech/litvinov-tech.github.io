@@ -33,19 +33,20 @@
   ];
 
   const CAPACITY_CITY_OPTIONS = [
-    { key: "maceio", name: "Maceio", uf: "AL", id: "" },
+    { key: "maceio", name: "Maceio", uf: "AL", id: "66faae66cd18349215c90187" },
     { key: "belo-horizonte", name: "Belo Horizonte", uf: "MG", id: "690388c7ad28bbbf340407e0" },
-    { key: "recife", name: "Recife", uf: "PE", id: "" },
-    { key: "natal", name: "Natal", uf: "RN", id: "" },
-    { key: "aracaju", name: "Aracaju", uf: "SE", id: "" },
-    { key: "ilheus", name: "Ilheus", uf: "BA", id: "" },
-    { key: "anchieta", name: "Anchieta", uf: "ES", id: "" },
-    { key: "salvador", name: "Salvador", uf: "BA", id: "" },
-    { key: "guarapari", name: "Guarapari", uf: "ES", id: "" },
-    { key: "vila-velha", name: "Vila Velha", uf: "ES", id: "" },
-    { key: "belem", name: "Belem", uf: "PA", id: "" },
-    { key: "fortaleza", name: "Fortaleza", uf: "CE", id: "" },
-    { key: "serra", name: "Serra", uf: "ES", id: "" },
+    { key: "recife", name: "Recife", uf: "PE", id: "66faadb8cd18349215c874c4" },
+    { key: "natal", name: "Natal", uf: "RN", id: "68b04f07be72115f4f51278a" },
+    { key: "aracaju", name: "Aracaju", uf: "SE", id: "67d2d76c77471d68d3c4be6e" },
+    { key: "ilheus", name: "Ilheus", uf: "BA", id: "694937516237fb6f62b7bdf5" },
+    { key: "anchieta", name: "Anchieta", uf: "ES", id: "692aff853460cff7c27b1cc4" },
+    { key: "salvador", name: "Salvador", uf: "BA", id: "6763d2ab7e6826ba04f4cafa" },
+    { key: "guarapari", name: "Guarapari", uf: "ES", id: "68427ddd6a7c4e0a60fe3303" },
+    { key: "vila-velha", name: "Vila Velha", uf: "ES", id: "661d34656172ab96d2cfb8a3" },
+    { key: "belem", name: "Belem", uf: "PA", id: "68878e516923b6b7474e7bad" },
+    { key: "fortaleza", name: "Fortaleza", uf: "CE", id: "66ee85c1a70885bbb9a4787a" },
+    { key: "serra", name: "Serra", uf: "ES", id: "695fc08a2479703707152316" },
+    { key: "curitiba", name: "Curitiba", uf: "PR", id: "655636e16e2c3042b5abbc9e" },
   ];
   const CAPACITY_CITY_STORAGE_KEY = "parkingBrainCapacityCities";
   const LOGISTIC_BASE = "https://logistic.gojet.app/api/v0/urent";
@@ -62,6 +63,7 @@
     leadMinutes: 45,
     minRides: 3,
     topLimit: 24,
+    monitorParkingLimit: "all",
     planMode: "now",
   };
 
@@ -141,12 +143,12 @@
   function bindElements() {
     [
       "statusPill", "statusText", "refreshBtn", "dropZone", "fileInput", "uploadBtn",
-      "lastUploadText", "lookbackDays", "leadMinutes", "minRides", "topLimit",
+      "lastUploadText", "lookbackDays", "leadMinutes", "minRides", "topLimit", "monitorParkingLimit",
       "lookbackValue", "leadValue", "minRidesValue", "topLimitValue",
       "exportHistoryBtn", "importHistoryBtn", "historyInput", "exportCsvBtn", "clearBtn",
       "uploadCount", "uploadList", "kpiRides", "kpiParkings", "kpiDays", "kpiConfidence",
       "planSubtext", "planList", "topSubtext", "topTable", "searchInput", "hourChart", "donorList",
-      "capacityCitySelect", "capacityCityId", "allParkingsBtn", "monitorRulesBtn", "appsScriptUser", "appsScriptPass", "appsScriptLoginBtn", "appsScriptStatus",
+      "capacityCitySelect", "capacityCityId", "allParkingsBtn", "monitorRulesBtn", "gojetParkingsBtn", "gojetParkingsInput", "appsScriptUser", "appsScriptPass", "appsScriptLoginBtn", "appsScriptStatus",
       "capacityUploadBtn", "capacityInput", "monitorCapacityBtn", "monitorCapacityInput", "weekendCapacityBtn", "weekendCapacityInput",
       "capacityExportBtn", "monitorUpdateExportBtn", "capacityStatusText", "capacityKpiSource", "capacityKpiMatched",
       "capacityKpiMissing", "capacityKpiProblems", "capacityKpiGenerated", "capacityMissingList", "capacityMismatchTable",
@@ -224,12 +226,7 @@
 
     els.capacityCitySelect?.addEventListener("change", () => {
       const option = capacityCityByKey(els.capacityCitySelect.value) || CAPACITY_CITY_OPTIONS[1];
-      state.capacity.selectedCityKey = option.key;
-      state.capacity.selectedCityName = option.name;
-      state.capacity.selectedCityId = storedCityId(option.key) || option.id || "";
-      state.capacity.allParkings = [];
-      state.capacity.allParkingsSource = "";
-      if (els.capacityCityId) els.capacityCityId.value = state.capacity.selectedCityId;
+      setSelectedCapacityCity(option, { clearLoaded: true });
       recomputeCapacityCompare();
       renderCapacityCompare();
     });
@@ -240,6 +237,18 @@
     });
     els.allParkingsBtn?.addEventListener("click", loadSelectedCityParkings);
     els.monitorRulesBtn?.addEventListener("click", loadSelectedCityMonitorRules);
+    els.gojetParkingsBtn?.addEventListener("click", () => els.gojetParkingsInput?.click());
+    els.gojetParkingsInput?.addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (file) await importGoJetParkingsFile(file);
+    });
+    els.monitorParkingLimit?.addEventListener("change", () => {
+      state.settings.monitorParkingLimit = cleanText(els.monitorParkingLimit.value) || "all";
+      persistSettingsSoon();
+      recomputeCapacityCompare();
+      renderCapacityCompare();
+    });
     els.appsScriptLoginBtn?.addEventListener("click", loginAppsScriptBridge);
 
     els.capacityUploadBtn?.addEventListener("click", () => els.capacityInput.click());
@@ -381,6 +390,7 @@
     els.leadValue.textContent = state.settings.leadMinutes;
     els.minRidesValue.textContent = state.settings.minRides;
     els.topLimitValue.textContent = state.settings.topLimit;
+    if (els.monitorParkingLimit) els.monitorParkingLimit.value = state.settings.monitorParkingLimit || "all";
     document.querySelectorAll("[data-plan-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.planMode === state.settings.planMode);
     });
@@ -404,7 +414,7 @@
         parsed.rides.forEach((ride) => existing.add(ride.id));
         allNew.push(...parsed.rides);
         uploadRows.push(parsed.upload);
-        toast(`${file.name}: добавлено ${parsed.upload.newRides}, BH строк ${parsed.upload.cityRows}`);
+        toast(`${file.name}: добавлено ${parsed.upload.newRides}, ${parsed.upload.cityName || activeCityName()} строк ${parsed.upload.cityRows}`);
       } catch (err) {
         console.error(err);
         toast(`${file.name}: ${err.message}`, true);
@@ -442,9 +452,13 @@
     const buffer = await file.arrayBuffer();
     const workbook = window.XLSX.read(buffer, { type: "array", cellDates: true });
     const sheetName = pickSheet(workbook);
-    if (!sheetName) throw new Error("лист не найден");
+    if (!sheetName) throw new Error("sheet not found");
     const sheet = workbook.Sheets[sheetName];
     const rows = window.XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+    const normalizedRows = rows.map((row) => normalizeRow(row));
+    const importCityName = detectImportCityName(normalizedRows);
+    const importCity = ensureCapacityCityOption(importCityName);
+    setSelectedCapacityCity(importCity, { clearLoaded: true });
 
     const rides = [];
     let cityRows = 0;
@@ -452,14 +466,14 @@
     let duplicateRows = 0;
     let parkingRows = 0;
 
-    rows.forEach((row, rowIndex) => {
-      const normalized = normalizeRow(row);
-      const city = cleanText(normalized["\u0413\u043e\u0440\u043e\u0434"]);
+    normalizedRows.forEach((normalized, rowIndex) => {
+      const city = cleanText(normalized["\u0413\u043e\u0440\u043e\u0434"] || normalized.City || normalized.city);
       const gpsReport = isGpsReportRow(normalized);
-      if (!sameCity(city) && !gpsReport) return;
+      if (city && !sameCity(city, importCity.name)) return;
+      if (!city && !gpsReport) return;
       cityRows += 1;
 
-      const ride = extractRide(normalized, file.name, rowIndex + 2);
+      const ride = extractRide(normalized, file.name, rowIndex + 2, importCity.name);
       if (!ride) {
         ignoredRows += 1;
         return;
@@ -479,6 +493,7 @@
       sheetName,
       importedAt,
       totalRows: rows.length,
+      cityName: importCity.name,
       cityRows,
       parkingRows,
       newRides: rides.length,
@@ -509,7 +524,7 @@
     return Boolean(row["OrderId"] && row["QR"] && row["\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043c\u044f \u0441\u0442\u0430\u0440\u0442\u0430"] && start && end && (pointInBh(start) || pointInBh(end)));
   }
 
-  function extractGpsReportRide(row, fileName, rowNumber) {
+  function extractGpsReportRide(row, fileName, rowNumber, fallbackCity = activeCityName()) {
     const startCoords = coordsFromLatLng(row["Start_Latitude"], row["Start_Longitude"]);
     const endCoords = coordsFromLatLng(row["End_Latitude"], row["End_Longitude"]);
     if (!startCoords || !endCoords || (!pointInBh(startCoords) && !pointInBh(endCoords))) return null;
@@ -525,7 +540,7 @@
 
     return {
       id: idRaw || `gps-${fallbackId}`,
-      city: CITY,
+      city: fallbackCity || activeCityName(),
       fileName,
       rowNumber,
       sourceType: "gps-report",
@@ -875,8 +890,8 @@
     return Number.isFinite(num) ? num : 0;
   }
 
-  function extractRide(row, fileName, rowNumber) {
-    if (isGpsReportRow(row)) return extractGpsReportRide(row, fileName, rowNumber);
+  function extractRide(row, fileName, rowNumber, fallbackCity = activeCityName()) {
+    if (isGpsReportRow(row)) return extractGpsReportRide(row, fileName, rowNumber, fallbackCity);
     const startNameRaw = firstValue(row, [
       "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043f\u0430\u0432\u0435\u0440\u0441\u0442\u0430\u043d\u0446\u0438\u0438 \u043d\u0430\u0447\u0430\u043b\u0430",
       "\u0417\u043e\u043d\u0430 \u043d\u0430\u0447\u0430\u043b\u0430 \u0430\u0440\u0435\u043d\u0434\u044b",
@@ -921,10 +936,11 @@
     const id = idRaw || `row-${fallbackId}`;
     const dateKey = toDateKey(startAt);
     const hour = startAt.getHours();
+    const cityName = cleanText(row["\u0413\u043e\u0440\u043e\u0434"] || row.City || row.city) || fallbackCity || activeCityName();
 
     return {
       id,
-      city: CITY,
+      city: cityName,
       fileName,
       rowNumber,
       ts: startAt.getTime(),
@@ -960,7 +976,7 @@
   }
 
   function analyze(rides, settings) {
-    const usable = rides.filter((ride) => ride.city === CITY);
+    const usable = rides.filter((ride) => sameCity(ride.city));
     const dates = [...new Set(usable.map((ride) => ride.dateKey))].sort();
     const latestTs = usable.reduce((max, ride) => Math.max(max, ride.ts || 0), 0);
     const latestDate = latestTs ? new Date(latestTs) : null;
@@ -1234,7 +1250,7 @@
     els.uploadList.innerHTML = state.uploads.slice(0, 8).map((upload) => `
       <div class="upload-item">
         <strong>${esc(upload.fileName)}</strong>
-        <span>${fmtDateTime(upload.importedAt)} · BH ${fmtInt(upload.cityRows)} · новых ${fmtInt(upload.newRides)}</span>
+        <span>${fmtDateTime(upload.importedAt)} · ${esc(upload.cityName || activeCityName())} ${fmtInt(upload.cityRows)} · новых ${fmtInt(upload.newRides)}</span>
       </div>
     `).join("");
   }
@@ -1343,7 +1359,7 @@
   async function exportHistory() {
     const payload = {
       version: 1,
-      city: CITY,
+      city: activeCityName(),
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       uploads: state.uploads,
@@ -1423,6 +1439,91 @@
     };
   }
 
+
+  function capacityCityKeyFromName(name) {
+    const normalized = normalizeGoJetCityName(name) || normalizeSearch(name);
+    return normalized ? normalized.replace(/\s+/g, "-") : `city-${hashText(name || Date.now())}`;
+  }
+
+  function capacityCityByName(name) {
+    const target = normalizeGoJetCityName(name);
+    if (!target) return null;
+    return CAPACITY_CITY_OPTIONS.find((city) => normalizeGoJetCityName(city.name) === target) || null;
+  }
+
+  function ensureCapacityCityOption(name) {
+    const label = cleanText(name);
+    const existing = capacityCityByName(label);
+    if (existing) return existing;
+
+    const key = capacityCityKeyFromName(label);
+    const option = { key, name: label || key, uf: "", id: storedCityId(key) || "" };
+    CAPACITY_CITY_OPTIONS.push(option);
+
+    if (els.capacityCitySelect) {
+      const item = document.createElement("option");
+      item.value = option.key;
+      item.textContent = option.name;
+      els.capacityCitySelect.appendChild(item);
+    }
+    return option;
+  }
+
+  function setSelectedCapacityCity(cityOrName, options = {}) {
+    const option = typeof cityOrName === "string" ? ensureCapacityCityOption(cityOrName) : cityOrName;
+    if (!option) return selectedCapacityCity();
+    const changed = state.capacity.selectedCityKey !== option.key;
+    state.capacity.selectedCityKey = option.key;
+    state.capacity.selectedCityName = option.name;
+    state.capacity.selectedCityId = option.id || storedCityId(option.key) || "";
+
+    if (els.capacityCitySelect) els.capacityCitySelect.value = option.key;
+    if (els.capacityCityId) els.capacityCityId.value = state.capacity.selectedCityId;
+    if (changed && options.clearLoaded !== false) {
+      state.capacity.allParkings = [];
+      state.capacity.allParkingsSource = "";
+      state.capacity.monitorRows = [];
+      state.capacity.monitorFile = null;
+      state.capacity.monitorFileName = "";
+      state.capacity.monitorRulesSource = "";
+      state.capacity.sourceRows = [];
+      state.capacity.sourceFileName = "";
+      state.capacity.weekendRows = [];
+      state.capacity.weekendFileName = "";
+      state.capacity.comparison = null;
+      state.capacity.generated = null;
+    }
+    return selectedCapacityCity();
+  }
+
+  function activeCityName() {
+    return cleanText(selectedCapacityCity().name || CITY);
+  }
+
+  function detectImportCityName(rows) {
+    const counts = new Map();
+    const labels = new Map();
+    rows.forEach((row) => {
+      const raw = cleanText(row["\u0413\u043e\u0440\u043e\u0434"] || row.City || row.city);
+      const city = normalizeGoJetCityName(raw);
+      if (!city) return;
+      counts.set(city, (counts.get(city) || 0) + 1);
+      if (!labels.has(city)) labels.set(city, raw);
+    });
+
+    const active = normalizeGoJetCityName(activeCityName());
+    if (counts.has(active)) return activeCityName();
+
+    let best = "";
+    let bestCount = 0;
+    counts.forEach((count, city) => {
+      if (count > bestCount) {
+        best = city;
+        bestCount = count;
+      }
+    });
+    return labels.get(best) || best || activeCityName();
+  }
   function initAppsScriptBridge() {
     if (els.appsScriptUser) els.appsScriptUser.value = localStorage.getItem(APPS_SCRIPT_USER_KEY) || "";
     updateAppsScriptStatus(appsScriptToken() ? "manual conectado" : "auto Netlify", appsScriptToken() ? "ok" : "");
@@ -1583,6 +1684,33 @@
     return rows;
   }
 
+  // Bundled catalog: parkings with real id/name/coords collected once from the JET
+  // admin API and shipped with the site (parkings/<cityId>.json). No Cloudflare, no
+  // token, works offline — the primary source of parking_id for every city.
+  async function loadBundledCityParkings(cityId) {
+    if (!cityId) throw new Error("no cityId for bundled catalog");
+    const res = await fetch(`parkings/${encodeURIComponent(cityId)}.json`, { cache: "no-cache" });
+    if (!res.ok) throw new Error(`catálogo local ${res.status}`);
+    const rows = rowsFromPayload(await res.json());
+    if (!rows.length) throw new Error("catálogo local vazio");
+    return rows;
+  }
+
+  // Apps Script buscarPontosGoJet fetches GoJet live from Google servers (bypasses
+  // Cloudflare that blocks browser/proxy) and returns each parking WITH gojet_id.
+  // This is the reliable id-complete source for the monitor CSV.
+  async function loadAppsScriptGoJetParkings(city, cityId) {
+    updateAppsScriptStatus("buscando GoJet com id...", appsScriptToken() ? "ok" : "");
+    const data = await fetchAppsScript({
+      acao: "buscarPontosGoJet",
+      cidade: appsScriptCityName(city),
+      gojetCityId: cityId || "",
+    });
+    const rows = rowsFromPayload(data);
+    if (!rows.length) throw new Error("buscarPontosGoJet nao retornou pontos");
+    return rows;
+  }
+
   async function loadAppsScriptMonitorFile(city) {
     updateAppsScriptStatus("lendo monitor...", appsScriptToken() ? "ok" : "");
     const data = await fetchAppsScript({ acao: "carregarPontos", cidade: appsScriptCityName(city) });
@@ -1655,29 +1783,73 @@
     const city = selectedCapacityCity();
     let rows = [];
     let source = "";
-    try {
-      els.capacityStatusText.textContent = `Lendo Apps Script all parkings para ${city.name}...`;
-      rows = await loadAppsScriptAllParkings(city);
-      source = `Apps Script all parkings: ${city.name}`;
-    } catch (appsErr) {
-      console.warn("Apps Script all parkings failed, trying GoJet", appsErr);
+    let firstError = null;
+
+    const cityId = await resolveGoJetCityId(city).catch(() => "");
+    if (cityId) {
+      state.capacity.selectedCityId = cityId;
+      if (els.capacityCityId) els.capacityCityId.value = cityId;
+      rememberCityId(city.key, cityId);
+    }
+
+    // Ordered sources by reliability of a real parking_id:
+    // 1) Apps Script buscarPontosGoJet — id-complete AND Cloudflare-safe (Google server).
+    // 2) Direct browser GoJet fetch — opportunistic (usually CORS/Cloudflare-blocked).
+    // 3) Apps Script carregarTodosPontos — live but WITHOUT parking_id (flagged).
+    const sources = [];
+    if (cityId) {
+      sources.push({
+        label: `Catálogo local com id: ${city.name}`,
+        run: () => loadBundledCityParkings(cityId),
+      });
+      sources.push({
+        label: `Apps Script GoJet com id: ${city.name}`,
+        run: () => loadAppsScriptGoJetParkings(city, cityId),
+      });
+      sources.push({
+        label: `GoJet all parkings: ${city.name}`,
+        run: () => fetchGoJetParkings(cityId, (loaded, total) => {
+          els.capacityStatusText.textContent = `GoJet parkings ${city.name}: ${fmtInt(loaded)}${total ? `/${fmtInt(total)}` : ""}`;
+        }),
+      });
+    }
+    sources.push({
+      label: `Apps Script Todos os Pontos (sem id): ${city.name}`,
+      run: () => loadAppsScriptAllParkings(city),
+    });
+
+    for (const src of sources) {
       try {
-        rows = await fetchGoJetAllParkingsForCity(city);
-        source = `GoJet all parkings: ${city.name}`;
-      } catch (gojetErr) {
-        console.warn("GoJet all parkings failed, trying cache", gojetErr);
-        const cached = state.capacity.allParkings.length ? { rows: state.capacity.allParkings, source: state.capacity.allParkingsSource || "already loaded" } : cachedAllParkings(city);
-        if (!cached?.rows?.length) {
-          renderCapacityCompare();
-          if (els.capacityStatusText) els.capacityStatusText.textContent = `All parkings: ${appsErr.message || gojetErr.message}`;
-          toast(`All parkings: ${appsErr.message || gojetErr.message}`, true);
-          return;
-        }
+        els.capacityStatusText.textContent = `Carregando ${src.label}...`;
+        const got = await src.run();
+        if (got && got.length) { rows = got; source = src.label; break; }
+      } catch (err) {
+        firstError = firstError || err;
+        console.warn(`${src.label} falhou`, err);
+      }
+    }
+
+    if (!rows.length) {
+      const cached = cachedAllParkings(city);
+      if (cached?.rows?.length) {
         rows = cached.rows;
         source = `${cached.source || "cache"} (cache)`;
       }
     }
 
+    if (!rows.length) {
+      renderCapacityCompare();
+      const msg = firstError?.message || "all parkings unavailable";
+      if (els.capacityStatusText) els.capacityStatusText.textContent = `All parkings: ${msg}`;
+      toast(`All parkings: ${msg}`, true);
+      return;
+    }
+
+    applyAllParkingsRows(city, rows, source);
+  }
+
+  // Shared tail: normalize raw parking rows into state.capacity.allParkings + status.
+  function applyAllParkingsRows(city, rows, source) {
     try {
       let normalized = normalizeCapacityParkings(rows);
       if (!normalized.length) throw new Error("all parkings list is empty after parsing");
@@ -1685,11 +1857,16 @@
       state.capacity.allParkings = normalized;
       state.capacity.allParkingsSource = source;
       saveCachedAllParkings(city, normalized, source);
-      const hasParkingIds = normalized.some((point) => point.id);
-      if (city.name === CITY && state.capacity.allParkings.length && hasParkingIds) state.catalogPoints = state.capacity.allParkings;
+      const withId = normalized.filter((point) => point.id).length;
+      const hasParkingIds = withId > 0;
+      state.catalogPoints = city.name === CITY && hasParkingIds ? state.capacity.allParkings : [];
       recomputeCapacityCompare();
       renderCapacityCompare();
-      toast(`${city.name}: all parkings ${fmtInt(state.capacity.allParkings.length)}`);
+      if (els.capacityStatusText) {
+        const flag = withId === normalized.length ? "" : (hasParkingIds ? " · atencao: alguns sem id" : " · SEM parking_id");
+        els.capacityStatusText.textContent = `${source}: ${fmtInt(normalized.length)} parkings · com parking_id ${fmtInt(withId)}/${fmtInt(normalized.length)}${flag}`;
+      }
+      toast(`${city.name}: ${fmtInt(normalized.length)} parkings, com id ${fmtInt(withId)}/${fmtInt(normalized.length)}`, !hasParkingIds);
     } catch (err) {
       console.error(err);
       toast(`All parkings: ${err.message}`, true);
@@ -1697,54 +1874,62 @@
     }
   }
 
+  // Reliable fallback when GoJet is Cloudflare-blocked server-side: import a
+  // parkings JSON captured from the user's logged-in GoJet browser tab (which
+  // passes Cloudflare). Accepts a raw array or {parkings|pontos|entries|rows:[...]}.
+  async function importGoJetParkingsFile(file) {
+    const city = selectedCapacityCity();
+    try {
+      const text = await file.text();
+      const rows = rowsFromPayload(JSON.parse(text));
+      if (!rows.length) throw new Error("JSON sem parkings (esperado id/name/lat/lng do GoJet)");
+      applyAllParkingsRows(city, rows, `Import GoJet parkings: ${file.name}`);
+    } catch (err) {
+      console.error(err);
+      toast(`Import parkings: ${err.message}`, true);
+    }
+  }
   async function loadSelectedCityMonitorRules() {
     const city = selectedCapacityCity();
     let parsed = null;
     let source = "";
+    let firstError = null;
     try {
-      els.capacityStatusText.textContent = `Lendo Apps Script monitor para ${city.name}...`;
-      parsed = await loadAppsScriptMonitorFile(city);
-      source = `Apps Script monitor: ${city.name}`;
-    } catch (appsErr) {
-      console.warn("Apps Script monitor failed, trying GoJet", appsErr);
+      const cityId = await resolveGoJetCityId(city);
+      if (!cityId) throw new Error(`city_id not found for ${city.name}`);
+      state.capacity.selectedCityId = cityId;
+      if (els.capacityCityId) els.capacityCityId.value = cityId;
+      rememberCityId(city.key, cityId);
+      els.capacityStatusText.textContent = `Loading monitor rules for ${city.name}...`;
+      const [rulesRaw, scheduleRaw] = await Promise.all([
+        fetchLogisticRows(`${LOGISTIC_BASE}/parking_rules?city_id=${encodeURIComponent(cityId)}`),
+        fetchLogisticJson(`${LOGISTIC_BASE}/schedule?city_id=${encodeURIComponent(cityId)}`).catch(() => null),
+      ]);
+      parsed = createMonitorCapacityFileFromRules(rulesRaw, scheduleRaw, city, state.capacity.allParkings || []);
+      source = `GoJet monitor rules: ${city.name}`;
+    } catch (gojetErr) {
+      firstError = gojetErr;
+      console.warn("GoJet monitor failed, trying Apps Script", gojetErr);
       try {
-        const cityId = await resolveGoJetCityId(city);
-        if (!cityId) throw new Error(`city_id not found for ${city.name}`);
-        state.capacity.selectedCityId = cityId;
-        if (els.capacityCityId) els.capacityCityId.value = cityId;
-        rememberCityId(city.key, cityId);
-        els.capacityStatusText.textContent = `Loading monitor rules for ${city.name}...`;
-        const [rulesRaw, scheduleRaw] = await Promise.all([
-          fetchLogisticRows(`${LOGISTIC_BASE}/parking_rules?city_id=${encodeURIComponent(cityId)}`),
-          fetchLogisticJson(`${LOGISTIC_BASE}/schedule?city_id=${encodeURIComponent(cityId)}`).catch(() => null),
-        ]);
-        parsed = createMonitorCapacityFileFromRules(rulesRaw, scheduleRaw, city, state.capacity.allParkings || []);
-        source = `GoJet monitor rules: ${city.name}`;
-      } catch (gojetErr) {
-        console.error(gojetErr);
+        els.capacityStatusText.textContent = `Lendo Apps Script monitor para ${city.name}...`;
+        parsed = await loadAppsScriptMonitorFile(city);
+        source = `Apps Script monitor: ${city.name}`;
+      } catch (appsErr) {
+        console.error(appsErr);
+        toast(`Monitor rules: ${appsErr.message || firstError?.message}`, true);
         renderCapacityCompare();
-        if (els.capacityStatusText) els.capacityStatusText.textContent = `Monitor rules: ${appsErr.message || gojetErr.message}. \u041c\u043e\u0436\u043d\u043e \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c Monitor CSV \u0432\u0440\u0443\u0447\u043d\u0443\u044e.`;
-        toast(`Monitor rules: ${appsErr.message || gojetErr.message}`, true);
         return;
       }
     }
 
-    try {
-      state.capacity.monitorRows = parsed.rows;
-      state.capacity.monitorFile = parsed;
-      state.capacity.monitorFileName = source;
-      state.capacity.monitorRulesSource = source;
-      recomputeCapacityCompare();
-      renderCapacityCompare();
-      toast(`${city.name}: monitor rules ${fmtInt(parsed.rows.length)}`);
-    } catch (err) {
-      console.error(err);
-      toast(`Monitor rules: ${err.message}`, true);
-      renderCapacityCompare();
-    }
+    state.capacity.monitorFile = parsed;
+    state.capacity.monitorRows = parsed.rows;
+    state.capacity.monitorFileName = source;
+    state.capacity.monitorRulesSource = source;
+    recomputeCapacityCompare();
+    renderCapacityCompare();
+    toast(`${city.name}: monitor ${fmtInt(parsed.rows.length)} linhas`);
   }
-
-
   async function resolveGoJetCityId(city) {
     const manual = cleanText(state.capacity?.selectedCityId || els.capacityCityId?.value || "");
     if (manual) return manual;
@@ -1759,24 +1944,32 @@
   async function loadGoJetCityMap() {
     if (goJetCityMap.size) return goJetCityMap;
     if (!goJetCityMapPromise) {
-      goJetCityMapPromise = fetchLogisticJson(`${LOGISTIC_BASE}/cities`).then((cities) => {
+      goJetCityMapPromise = (async () => {
+        let citiesPayload = null;
+        try {
+          const data = await fetchAppsScript({ acao: "listarCidadesGoJet" });
+          citiesPayload = data?.cidades || data?.rows || data?.data || data;
+        } catch (appsErr) {
+          console.warn("Apps Script city list failed, trying GoJet cities", appsErr);
+          citiesPayload = await fetchLogisticJson(`${LOGISTIC_BASE}/cities`);
+        }
+
         goJetCityMap = new Map();
-        (Array.isArray(cities) ? cities : rowsFromPayload(cities)).forEach((city) => {
-          const name = cleanText(city.name || city.title || city.city || "");
+        rowsFromPayload(citiesPayload).forEach((city) => {
+          const name = cleanText(city.name || city.nome || city.title || city.city || "");
           const id = cleanText(city.id || city._id || city.city_id || city.cityId || "");
           if (!name || !id) return;
           goJetCityMap.set(normalizeGoJetCityName(name), id);
           goJetCityMap.set(normalizeGoJetCityName(name.split("/")[0]), id);
         });
         return goJetCityMap;
-      }).catch((err) => {
+      })().catch((err) => {
         goJetCityMapPromise = null;
         throw err;
       });
     }
     return goJetCityMapPromise;
   }
-
   function findGoJetCityId(name, map) {
     const target = normalizeGoJetCityName(name);
     if (!target) return "";
@@ -1802,17 +1995,22 @@
     let totalPages = 1;
     let totalItems = 0;
     for (let page = 1; page <= totalPages && page <= 30; page += 1) {
-      const data = await fetchLogisticJson(`${LOGISTIC_BASE}/parkings?city_id=${encodeURIComponent(cityId)}&limit=500&page=${page}`);
-      const rows = data.entries || data.data || data.items || data.results || (Array.isArray(data) ? data : []);
+      let data = null;
+      const query = `city_id=${encodeURIComponent(cityId)}&limit=500&page=${page}`;
+      try {
+        data = await fetchLogisticJson(`${LOGISTIC_BASE}/parkings?${query}`);
+      } catch (firstErr) {
+        data = await fetchLogisticJson(`${LOGISTIC_BASE}/parkings/?${query}`);
+      }
+      const rows = rowsFromPayload(data);
       out.push(...rows);
-      totalItems = Number(data.total_items || data.totalItems || data.total || totalItems || out.length);
-      totalPages = Number(data.total_pages || data.totalPages || totalPages || 1);
+      totalItems = Number(data?.total_items || data?.totalItems || data?.total || totalItems || out.length);
+      totalPages = Number(data?.total_pages || data?.totalPages || totalPages || 1);
       if (onProgress) onProgress(out.length, totalItems);
       if (!rows.length || rows.length < 500) break;
     }
     return out;
   }
-
   async function fetchLogisticPaged(kind, cityId, maxPages = 10) {
     const out = [];
     for (let page = 1; page <= maxPages; page += 1) {
@@ -1838,7 +2036,7 @@
   function rowsFromPayload(payload) {
     if (Array.isArray(payload)) return payload;
     if (!payload || typeof payload !== "object") return [];
-    for (const key of ["rows", "pontos", "points", "data", "items", "entries", "results", "parkings", "bikes", "rules", "schedules", "monitores", "todos"]) {
+    for (const key of ["rows", "pontos", "points", "cidades", "data", "items", "entries", "results", "parkings", "bikes", "rules", "schedules", "monitores", "todos"]) {
       const value = payload[key];
       if (Array.isArray(value)) return value;
       if (value && Array.isArray(value.data)) return value.data;
@@ -1852,7 +2050,8 @@
     return (rows || []).map((row) => {
       const point = objectPoint(row);
       const name = cleanText(row.name || row.nome || row.Nome || row.title || row.shortName || row.address || row.endereco || row.estacionamento || row.ponto || row.parking_name || row.parkingName || row.id);
-      const id = cleanText(row.id || row._id || row.parking_id || row.parkingId || row.uuid || "");
+      const rawId = row.id ?? row.parking_id ?? row.parkingId ?? row.gojet_id ?? row.gojetId ?? row.uuid ?? row.id_parking ?? row.parking?.id ?? row.parking?._id ?? row._id?.$oid ?? row._id?.oid ?? (typeof row._id === "string" ? row._id : "");
+      const id = cleanText(rawId);
       if (!name) return null;
       return {
         id,
@@ -1862,11 +2061,10 @@
         lng: point?.lng ?? null,
         monitor: Boolean(row.monitor || row.is_monitor || row.isMonitor || row.monitored),
         bikesCount: toNumber(row.bikes_count ?? row.bikesCount ?? row.current ?? row.available),
-        source: "GoJet parkings",
+        source: id ? "GoJet parkings" : "parkings without id",
       };
     }).filter(Boolean);
   }
-
   function createMonitorCapacityFileFromRules(rulesRaw, scheduleRaw, city, allParkings) {
     const headersRaw = ["city_id", "city_name", "schedule_id", "schedule_name", "parking_id", "parking_name", "parking_latitude", "parking_longitude", "capacity"];
     const scheduleNames = buildScheduleNameMap(scheduleRaw);
@@ -1959,7 +2157,7 @@
       renderCapacityCompare();
       renderAutoCapacitySummary();
       setStatus("ok", `Monitor CSV \u0433\u043e\u0442\u043e\u0432: ${fmtInt(state.capacity.generated?.outputRecords?.length || 0)} \u0441\u0442\u0440\u043e\u043a`);
-      if (!auto) toast("\u0413\u043e\u0442\u043e\u0432\u043e: capacity \u0441\u043e\u0431\u0440\u0430\u043d \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0430\u043c, \u043c\u043e\u0436\u043d\u043e \u0441\u043a\u0430\u0447\u0430\u0442\u044c Belo Horizonte.csv");
+      if (!auto) toast(`\u0413\u043e\u0442\u043e\u0432\u043e: capacity \u0441\u043e\u0431\u0440\u0430\u043d \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0430\u043c, \u043c\u043e\u0436\u043d\u043e \u0441\u043a\u0430\u0447\u0430\u0442\u044c ${selectedCapacityCity().name}.csv`);
       return built;
     } catch (err) {
       console.error(err);
@@ -1970,8 +2168,21 @@
     }
   }
 
+  function monitorParkingLimitValue() {
+    const value = cleanText(state.settings.monitorParkingLimit || "all");
+    if (!value || value === "all") return Infinity;
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? num : Infinity;
+  }
+
+  function applyMonitorParkingLimit(rows) {
+    const limit = monitorParkingLimitValue();
+    const sliced = Number.isFinite(limit) ? rows.slice(0, limit) : rows;
+    return sliced.map((row, index) => ({ ...row, rank: index + 1 }));
+  }
+
   function buildRentalCapacityRows(rides) {
-    const usable = (rides || []).filter((ride) => ride.city === CITY && ride.ts);
+    const usable = (rides || []).filter((ride) => sameCity(ride.city) && ride.ts);
     const latestTs = usable.reduce((max, ride) => Math.max(max, ride.ts || 0), 0);
     const cutoffTs = latestTs ? latestTs - state.settings.lookbackDays * 86400000 : 0;
     const resolver = buildParkingResolver(usable);
@@ -2031,14 +2242,15 @@
       merged.set(row.key, base);
     });
 
-    const sourceRows = [...merged.values()]
+    const sourceRowsAll = [...merged.values()]
       .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0) >= 4)
-      .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0))
-      .map((row, index) => ({ ...row, rank: index + 1 }));
+      .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0));
+    const sourceRows = applyMonitorParkingLimit(sourceRowsAll);
 
-    const weekendRows = weekendRowsRaw
+    const weekendRowsAll = weekendRowsRaw
       .filter((row) => row.targetWeekend >= 4)
-      .map((row, index) => ({ ...row, rank: index + 1, blockSummary: `\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435 ${row.targetWeekend}` }));
+      .map((row) => ({ ...row, blockSummary: `\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435 ${row.targetWeekend}` }));
+    const weekendRows = applyMonitorParkingLimit(weekendRowsAll);
 
     return {
       sourceRows,
@@ -2666,7 +2878,8 @@
     const csv = serializeMonitorFile(result.headersRaw, result.outputRecords.map((record) => record.cells), result.delimiter || ";");
     const name = `${selectedCapacityCity().name || "city"}.csv`;
     downloadBlob(`\ufeff${csv}`, name, "text/csv;charset=utf-8");
-    toast(`Ready CSV: ${fmtInt(result.outputRecords.length)} rows / updated ${fmtInt(result.updated)} / added ${fmtInt(result.added)} / skipped ${fmtInt(result.skipped.length)}`);
+    const missingIds = result.skipped.filter((row) => String(row.reason || "").includes("parking_id missing")).length;
+    toast(`Ready CSV: ${fmtInt(result.outputRecords.length)} rows / updated ${fmtInt(result.updated)} / added ${fmtInt(result.added)} / sem parking_id ${fmtInt(missingIds)}`);
   }
 
   function createBlankMonitorFile() {
@@ -2718,13 +2931,21 @@
       return null;
     }
 
-    const outputRecords = file.records.map((record) => ({ row: record.row, cells: padCells(record.cells, file.headersRaw.length) }));
+    const selectedCity = selectedCapacityCity();
+    let defaultCityId = selectedCity.id || "";
+    let defaultCityName = selectedCity.name || CITY;
+    const outputRecords = file.records
+      .map((record) => ({ row: record.row, cells: padCells(record.cells, file.headersRaw.length) }))
+      .filter((record) => {
+        const rowCityName = indices.cityName >= 0 ? cellAt(record.cells, indices.cityName) : "";
+        const rowCityId = indices.cityId >= 0 ? cellAt(record.cells, indices.cityId) : "";
+        if (rowCityName && !sameCity(rowCityName, selectedCity.name)) return false;
+        if (rowCityId && selectedCity.id && rowCityId !== selectedCity.id) return false;
+        return true;
+      });
     const scheduleIds = new Map();
     const byParkingSchedule = new Map();
     const parkingDirectory = new Map();
-    const selectedCity = selectedCapacityCity();
-    let defaultCityId = selectedCity.id || file.cityId || "";
-    let defaultCityName = selectedCity.name || file.cityName || CITY;
 
     outputRecords.forEach((record, index) => {
       const cells = record.cells;
@@ -2732,8 +2953,10 @@
       const scheduleId = cellAt(cells, indices.scheduleId);
       const parkingId = cellAt(cells, indices.parkingId);
       const parkingName = cellAt(cells, indices.parkingName);
-      if (!defaultCityId && indices.cityId >= 0) defaultCityId = cellAt(cells, indices.cityId);
-      if (indices.cityName >= 0 && cellAt(cells, indices.cityName)) defaultCityName = cellAt(cells, indices.cityName);
+      const rowCityName = indices.cityName >= 0 ? cellAt(cells, indices.cityName) : "";
+      const sameOutputCity = !rowCityName || sameCity(rowCityName, selectedCity.name);
+      if (!defaultCityId && sameOutputCity && indices.cityId >= 0) defaultCityId = cellAt(cells, indices.cityId);
+      if (!defaultCityName && sameOutputCity && rowCityName) defaultCityName = rowCityName;
       if (schedule && scheduleId) scheduleIds.set(schedule, scheduleId);
       const parkingKey = parkingId || capacityNameKey(parkingName);
       if (parkingKey && schedule) byParkingSchedule.set(`${parkingKey}|${schedule}`, index);
@@ -2791,6 +3014,8 @@
       if (existingIndex !== undefined) {
         const record = outputRecords[existingIndex];
         const oldValue = Number(cellAt(record.cells, indices.capacity));
+        setCell(record.cells, indices.cityId, defaultCityId);
+        setCell(record.cells, indices.cityName, defaultCityName);
         if (resolved?.id) setCell(record.cells, indices.parkingId, resolved.id);
         if (!cellAt(record.cells, indices.parkingName) && resolvedName) setCell(record.cells, indices.parkingName, resolvedName);
         if (!cellAt(record.cells, indices.lat) && validCoordinatePair(resolved)) setCell(record.cells, indices.lat, resolved.lat);
@@ -2866,8 +3091,7 @@
       }
 
       if (!cellAt(cells, indices.parkingId)) {
-        skipped.push({ name: parkingName || "unknown", schedule, reason: "parking_id not found in catalog" });
-        return;
+        skipped.push({ name: parkingName || "unknown", schedule, reason: "parking_id missing; kept by rental parking name" });
       }
       finalized.push(record);
     });
@@ -2952,8 +3176,9 @@
   }
 
   function buildCatalogCapacityItems() {
+    const selectedCity = selectedCapacityCity();
     const rows = [
-      ...(state.catalogPoints || []),
+      ...(selectedCity.name === CITY ? (state.catalogPoints || []) : []),
       ...(state.capacity?.allParkings || []),
     ];
     const byId = new Map();
@@ -3137,8 +3362,10 @@
     toast("История очищена");
   }
 
-  function sameCity(value) {
-    return normalizeSearch(value) === normalizeSearch(CITY);
+  function sameCity(value, cityName = activeCityName()) {
+    const current = normalizeGoJetCityName(cityName) || normalizeSearch(cityName);
+    const incoming = normalizeGoJetCityName(value) || normalizeSearch(value);
+    return Boolean(current && incoming && current === incoming);
   }
 
   function firstValue(row, keys) {

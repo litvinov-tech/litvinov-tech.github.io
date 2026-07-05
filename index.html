@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JET Capacity Brain</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css?v=20260705-6">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./app.js?v=20260705-7" defer></script>
+    <script src="./app.js?v=20260705-13" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -37,7 +37,7 @@
               <span>Загрузить аренды</span>
             </button>
             <div class="upload-meta">
-              <strong>Belo Horizonte only</strong>
+              <strong>All cities / auto city</strong>
               <span id="lastUploadText">Файлы еще не добавлены</span>
             </div>
           </section>
@@ -196,6 +196,18 @@
                 <span>city_id</span>
                 <input id="capacityCityId" type="text" placeholder="cole city_id aqui">
               </label>
+              <label>
+                <span>Qtd. no monitor</span>
+                <select id="monitorParkingLimit">
+                  <option value="all">Todas</option>
+                  <option value="50">Top 50</option>
+                  <option value="100">Top 100</option>
+                  <option value="150">Top 150</option>
+                  <option value="200">Top 200</option>
+                  <option value="250">Top 250</option>
+                  <option value="300">Top 300</option>
+                </select>
+              </label>
               <button id="allParkingsBtn" type="button">
                 <i data-lucide="map-pinned"></i>
                 <span>All parkings</span>
@@ -204,6 +216,11 @@
                 <i data-lucide="list-checks"></i>
                 <span>Monitor parkings</span>
               </button>
+              <button id="gojetParkingsBtn" type="button" title="Importar JSON de parkings capturado no navegador GoJet (com id)">
+                <i data-lucide="upload"></i>
+                <span>Importar parkings JSON</span>
+              </button>
+              <input id="gojetParkingsInput" type="file" accept=".json,application/json" hidden>
             </div>
             <div class="apps-bridge">
               <label>
