@@ -1496,7 +1496,7 @@
     els.capacityMismatchTable.innerHTML = groups.slice(0, 80).map((group) => `
       <tr>
         <td class="rank">${esc(group.rank)}</td>
-        <td><strong class="parking-name">${esc(group.parking)}</strong><span class="subline">source: ${esc(group.sourceParking)}</span></td>
+        <td><strong class="parking-name">${esc(group.parking)}</strong><span class="subline">из файла: ${esc(group.sourceParking)}</span></td>
         <td>${capacityProblemCell(group.day)}</td>
         <td>${capacityProblemCell(group.evening)}</td>
       </tr>
@@ -1505,9 +1505,11 @@
 
   function capacityProblemCell(row) {
     if (!row) return `<span class="capacity-ok">OK</span>`;
-    const cls = row.problem === "missing schedule" ? "capacity-missing" : "capacity-diff";
-    const text = row.problem === "missing schedule" ? `нет -> ${row.expected}` : `${row.actual} -> ${row.expected}`;
-    return `<span class="${cls}">${esc(text)}</span><span class="subline">${esc(row.problem)}</span>`;
+    const missing = row.problem === "missing schedule";
+    const cls = missing ? "capacity-missing" : "capacity-diff";
+    const text = missing ? `нет блока -> ${row.expected}` : `${row.actual} -> ${row.expected}`;
+    const note = missing ? "добавить блок" : "сейчас -> нужно";
+    return `<span class="${cls}">${esc(text)}</span><span class="subline">${esc(note)}</span>`;
   }
 
   function exportCapacityCompareCsv() {
