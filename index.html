@@ -143,7 +143,7 @@
             <div class="panel-head">
               <div>
                 <h2>Capacity Monitor</h2>
-                <span id="capacityStatusText">Загрузи capacity CSV для сравнения с монитором</span>
+                <span id="capacityStatusText">&#1047;&#1072;&#1075;&#1088;&#1091;&#1079;&#1080; capacity CSV &#1076;&#1083;&#1103; &#1089;&#1088;&#1072;&#1074;&#1085;&#1077;&#1085;&#1080;&#1103; &#1089; &#1084;&#1086;&#1085;&#1080;&#1090;&#1086;&#1088;&#1086;&#1084;</span>
               </div>
               <div class="panel-actions">
                 <button id="capacityUploadBtn" type="button">
@@ -156,33 +156,77 @@
                   <span>Monitor CSV</span>
                 </button>
                 <input id="monitorCapacityInput" type="file" accept=".csv" hidden>
+                <button id="weekendCapacityBtn" type="button">
+                  <i data-lucide="calendar-days"></i>
+                  <span>Weekend CSV</span>
+                </button>
+                <input id="weekendCapacityInput" type="file" accept=".csv" hidden>
                 <button id="capacityExportBtn" type="button">
+                  <i data-lucide="file-down"></i>
+                  <span>CSV &#1086;&#1090;&#1095;&#1077;&#1090;</span>
+                </button>
+                <button id="monitorUpdateExportBtn" type="button" class="primary-lite">
                   <i data-lucide="download"></i>
-                  <span>CSV</span>
+                  <span>&#1053;&#1086;&#1074;&#1099;&#1081; monitor CSV</span>
                 </button>
               </div>
             </div>
+
+            <div class="capacity-citybar">
+              <label>
+                <span>Cidade</span>
+                <select id="capacityCitySelect"></select>
+              </label>
+              <label class="city-id-field">
+                <span>city_id</span>
+                <input id="capacityCityId" type="text" placeholder="cole city_id aqui">
+              </label>
+              <button id="allParkingsBtn" type="button">
+                <i data-lucide="map-pinned"></i>
+                <span>All parkings</span>
+              </button>
+              <button id="monitorRulesBtn" type="button">
+                <i data-lucide="list-checks"></i>
+                <span>Monitor parkings</span>
+              </button>
+            </div>
+            <div class="apps-bridge">
+              <label>
+                <span>Apps Script user</span>
+                <input id="appsScriptUser" type="text" placeholder="usuario">
+              </label>
+              <label>
+                <span>Apps Script pass</span>
+                <input id="appsScriptPass" type="password" placeholder="senha">
+              </label>
+              <button id="appsScriptLoginBtn" type="button">
+                <i data-lucide="key-round"></i>
+                <span>Conectar Apps Script</span>
+              </button>
+              <span id="appsScriptStatus" class="bridge-status">offline</span>
+            </div>
             <div class="capacity-kpis">
               <div><strong id="capacityKpiSource">0</strong><span>capacity 4+</span></div>
-              <div><strong id="capacityKpiMatched">0</strong><span>найдено</span></div>
-              <div><strong id="capacityKpiMissing">0</strong><span>нет в monitor</span></div>
-              <div><strong id="capacityKpiProblems">0</strong><span>правки capacity</span></div>
+              <div><strong id="capacityKpiMatched">0</strong><span>&#1085;&#1072;&#1081;&#1076;&#1077;&#1085;&#1086;</span></div>
+              <div><strong id="capacityKpiMissing">0</strong><span>&#1085;&#1077;&#1090; &#1074; monitor</span></div>
+              <div><strong id="capacityKpiProblems">0</strong><span>&#1087;&#1088;&#1072;&#1074;&#1082;&#1080; capacity</span></div>
+              <div><strong id="capacityKpiGenerated">0</strong><span>&#1089;&#1090;&#1088;&#1086;&#1082; &#1074; &#1085;&#1086;&#1074;&#1086;&#1084; CSV</span></div>
             </div>
             <div class="capacity-grid">
               <div>
-                <h3>Нет в monitor / проверить имя</h3>
+                <h3>&#1053;&#1077;&#1090; &#1074; monitor / &#1087;&#1088;&#1086;&#1074;&#1077;&#1088;&#1080;&#1090;&#1100; &#1080;&#1084;&#1103;</h3>
                 <div id="capacityMissingList" class="compact-list"></div>
               </div>
               <div>
-                <h3>Капасити по будням</h3>
+                <h3>Capacity &#1087;&#1086; &#1073;&#1091;&#1076;&#1085;&#1103;&#1084;</h3>
                 <div class="table-wrap compact-table-wrap">
                   <table class="capacity-table">
                     <thead>
                       <tr>
                         <th>#</th>
-                        <th>Парковка</th>
-                        <th>Утро</th>
-                        <th>Вечер</th>
+                        <th>&#1055;&#1072;&#1088;&#1082;&#1086;&#1074;&#1082;&#1072;</th>
+                        <th>&#1059;&#1090;&#1088;&#1086;</th>
+                        <th>&#1042;&#1077;&#1095;&#1077;&#1088;</th>
                       </tr>
                     </thead>
                     <tbody id="capacityMismatchTable"></tbody>
