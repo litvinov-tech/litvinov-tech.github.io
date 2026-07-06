@@ -2394,16 +2394,25 @@
     return Number.isFinite(num) && num > 0 ? num : Infinity;
   }
 
-  // Independent Top-N per period: rank rows by this period's capacity field and
-  // zero the field for rows outside the top-N, so the period simply drops those
-  // parkings. A parking can still qualify in other periods (no cross-exclusion).
+  // Starts/day for a period (friday periods prefer friday starts when present).
+  function periodStarts(row, period) {
+    const isFriday = period === "fridayDay" || period === "fridayEvening";
+    const raw = isFriday ? (row.fridayStartsPerDay ?? row.startsPerDay) : row.startsPerDay;
+    return Number.parseFloat(raw) || 0;
+  }
+
+  // Independent Top-N per period. Priority = biggest capacity first, then biggest
+  // starts/day, so a limited quota always keeps the strongest parkings and only
+  // then the rest. Rows outside the top-N get this period's field zeroed (dropped
+  // from the period), while still able to qualify in other periods.
   function applyPeriodTopN(rows, period) {
     const field = CAPACITY_PERIOD_TARGET_FIELDS[period];
     const limit = periodLimitValue(period);
     if (limit === Infinity) return;
     const ranked = rows
       .filter((row) => (Number(row[field]) || 0) >= 2)
-      .sort((a, b) => (Number(b[field]) || 0) - (Number(a[field]) || 0));
+      .sort((a, b) => ((Number(b[field]) || 0) - (Number(a[field]) || 0))
+        || (periodStarts(b, period) - periodStarts(a, period)));
     const keep = new Set(ranked.slice(0, limit).map((row) => row.key));
     rows.forEach((row) => { if (!keep.has(row.key)) row[field] = 0; });
   }
