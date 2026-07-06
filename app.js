@@ -1665,36 +1665,29 @@
     return data;
   }
 
+  const CAPACITY_DEFAULT_SCHEDULE_IDS = {
+    [CAPACITY_DAY_SCHEDULE]: "d1369e80-d2d3-4f95-8972-b790faec6a57",
+    [CAPACITY_EVENING_SCHEDULE]: "08aff426-c04a-46b7-9505-4434a19c3387",
+    [CAPACITY_FRIDAY_DAY_SCHEDULE]: "9b4f3567-db4d-432c-a6c6-3a57f1aac5b7",
+    [CAPACITY_FRIDAY_EVENING_SCHEDULE]: "5ae37917-ef6d-40ca-8f87-3482ede360e4",
+    [CAPACITY_WEEKEND_SCHEDULE]: "8b35b8e3-0a76-4066-acaa-3aed47ea6fdf",
+  };
+
   const CAPACITY_SCHEDULE_IDS_BY_CITY = {
-    "belo-horizonte": {
-      [CAPACITY_DAY_SCHEDULE]: "d1369e80-d2d3-4f95-8972-b790faec6a57",
-      [CAPACITY_EVENING_SCHEDULE]: "08aff426-c04a-46b7-9505-4434a19c3387",
-      [CAPACITY_FRIDAY_DAY_SCHEDULE]: "9b4f3567-db4d-432c-a6c6-3a57f1aac5b7",
-      [CAPACITY_FRIDAY_EVENING_SCHEDULE]: "5ae37917-ef6d-40ca-8f87-3482ede360e4",
-      [CAPACITY_WEEKEND_SCHEDULE]: "8b35b8e3-0a76-4066-acaa-3aed47ea6fdf",
-    },
+    "belo-horizonte": CAPACITY_DEFAULT_SCHEDULE_IDS,
   };
 
   function capacityScheduleId(city, schedule) {
-    return CAPACITY_SCHEDULE_IDS_BY_CITY[city?.key || ""]?.[schedule] || "";
+    return CAPACITY_SCHEDULE_IDS_BY_CITY[city?.key || ""]?.[schedule] || CAPACITY_DEFAULT_SCHEDULE_IDS[schedule] || "";
   }
 
   function isKnownForeignScheduleId(city, scheduleId) {
-    const id = cleanText(scheduleId);
-    const cityKey = city?.key || "";
-    if (!id) return false;
-    return Object.entries(CAPACITY_SCHEDULE_IDS_BY_CITY).some(([key, ids]) => (
-      key !== cityKey && Object.values(ids || {}).some((value) => cleanText(value) === id)
-    ));
+    return false;
   }
 
   function isValidScheduleIdForCity(city, scheduleId) {
-    const id = cleanText(scheduleId);
-    if (!id) return false;
-    if (isKnownForeignScheduleId(city, id)) return false;
-    return true;
+    return Boolean(cleanText(scheduleId));
   }
-
   function collectScheduleIdsForOutputCity(records, indices, selectedCity) {
     const out = new Map();
     (records || []).forEach((record) => {
@@ -1948,19 +1941,64 @@
     }
   }
 
+  function arrayFromPayloadKeys(payload, keys) {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== "object") return [];
+    for (const key of keys) {
+      const value = payload[key];
+      if (Array.isArray(value)) return value;
+      if (value && Array.isArray(value.entries)) return value.entries;
+      if (value && Array.isArray(value.rows)) return value.rows;
+      if (value && Array.isArray(value.items)) return value.items;
+      if (value && Array.isArray(value.results)) return value.results;
+      if (value && Array.isArray(value.data)) return value.data;
+    }
+    return [];
+  }
+
+  function looksLikeCapacityRule(row) {
+    if (!row || typeof row !== "object") return false;
+    return Boolean(row.schedule_id || row.scheduleId || row.schedule || row.schedule_name || row.scheduleName || row.capacity || row.capacidade || row.expected_bikes_count || row.expectedBikesCount || row.target_bikes_count || row.targetBikesCount);
+  }
+
+  function looksLikeParkingRow(row) {
+    if (!row || typeof row !== "object" || looksLikeCapacityRule(row)) return false;
+    const point = objectPoint(row);
+    const name = cleanText(row.name || row.nome || row.title || row.parking_name || row.parkingName || row.address || row.endereco);
+    return Boolean(name && point);
+  }
+
   // Reliable fallback when GoJet is Cloudflare-blocked server-side: import a
-  // parkings JSON captured from the user's logged-in GoJet browser tab (which
-  // passes Cloudflare). Accepts a raw array or {parkings|pontos|entries|rows:[...]}.
+  // GoJet JSON captured from the user's logged-in GoJet browser tab. It accepts
+  // old parkings-only JSON and the new combined {parkings, rules, schedules} JSON.
   async function importGoJetParkingsFile(file) {
     const city = selectedCapacityCity();
     try {
       const text = await file.text();
-      const rows = rowsFromPayload(JSON.parse(text));
-      if (!rows.length) throw new Error("JSON sem parkings (esperado id/name/lat/lng do GoJet)");
-      applyAllParkingsRows(city, rows, `Import GoJet parkings: ${file.name}`);
+      const payload = JSON.parse(text);
+      const rawParkings = arrayFromPayloadKeys(payload, ["parkings", "pontos", "points", "parkingEntries", "allParkings", "entries", "items", "rows"])
+        .filter(looksLikeParkingRow);
+      const rawRules = arrayFromPayloadKeys(payload, ["rules", "parking_rules", "parkingRules", "monitorRules", "monitores"])
+        .filter(looksLikeCapacityRule);
+      const rawSchedules = payload?.schedules || payload?.schedule || payload?.scheduleRaw || payload?.schedulesRaw || null;
+
+      if (!rawParkings.length && !rawRules.length) throw new Error("JSON sem parkings/rules do GoJet");
+      if (rawParkings.length) applyAllParkingsRows(city, rawParkings, `Import GoJet parkings: ${file.name}`);
+
+      if (rawRules.length) {
+        const parsed = createMonitorCapacityFileFromRules(rawRules, rawSchedules, city, state.capacity.allParkings || []);
+        state.capacity.monitorFile = parsed;
+        state.capacity.monitorRows = parsed.rows;
+        state.capacity.monitorFileName = `Import GoJet rules: ${file.name}`;
+        state.capacity.monitorRulesSource = state.capacity.monitorFileName;
+        recomputeCapacityCompare();
+        renderCapacityCompare();
+        const withScheduleId = parsed.records.filter((record) => cellAt(record.cells, 2)).length;
+        toast(`${city.name}: rules ${fmtInt(parsed.rows.length)}, schedule_id ${fmtInt(withScheduleId)}/${fmtInt(parsed.records.length)}`, withScheduleId === 0);
+      }
     } catch (err) {
       console.error(err);
-      toast(`Import parkings: ${err.message}`, true);
+      toast(`Import GoJet JSON: ${err.message}`, true);
     }
   }
   async function loadSelectedCityMonitorRules() {
@@ -2142,13 +2180,15 @@
   function createMonitorCapacityFileFromRules(rulesRaw, scheduleRaw, city, allParkings) {
     const headersRaw = ["city_id", "city_name", "schedule_id", "schedule_name", "parking_id", "parking_name", "parking_latitude", "parking_longitude", "capacity"];
     const scheduleNames = buildScheduleNameMap(scheduleRaw);
+    const scheduleIdsByName = buildScheduleIdByNameMap(scheduleRaw);
     const parkingsById = new Map((allParkings || []).map((p) => [p.id, p]));
     const cellsRows = (rulesRaw || []).map((rule) => {
       const parkingId = cleanText(rule.parking_id || rule.parkingId || rule.parking?.id || rule.parking?._id || rule.id_parking || "");
       const parking = parkingId ? parkingsById.get(parkingId) : null;
       const point = objectPoint(rule) || objectPoint(rule.parking || {}) || (parking ? { lat: parking.lat, lng: parking.lng } : null);
-      const scheduleId = cleanText(rule.schedule_id || rule.scheduleId || rule.schedule?.id || rule.schedule?._id || "");
+      let scheduleId = cleanText(rule.schedule_id || rule.scheduleId || rule.schedule?.id || rule.schedule?._id || "");
       const scheduleName = normalizeCapacitySchedule(rule.schedule_name || rule.scheduleName || rule.schedule?.name || scheduleNames.get(scheduleId) || rule.period || rule.block || rule.rule_name || rule.name);
+      if (!scheduleId && scheduleName) scheduleId = scheduleIdsByName.get(scheduleName) || "";
       const parkingName = cleanText(rule.parking_name || rule.parkingName || rule.parking?.name || rule.name || parking?.name || parkingId);
       const capacity = Math.round(toNumber(rule.capacity ?? rule.target ?? rule.expected_bikes_count ?? rule.expectedBikesCount ?? rule.target_bikes_count ?? rule.targetBikesCount));
       if (!parkingName || !scheduleName || !Number.isFinite(capacity)) return null;
@@ -2166,6 +2206,17 @@
       const id = cleanText(row.id || row._id || row.schedule_id || row.scheduleId || "");
       const name = cleanText(row.name || row.title || row.schedule_name || row.scheduleName || row.period || row.block || "");
       if (id && name) out.set(id, name);
+    });
+    return out;
+  }
+
+  function buildScheduleIdByNameMap(payload) {
+    const rows = rowsFromPayload(payload);
+    const out = new Map();
+    rows.forEach((row) => {
+      const id = cleanText(row.id || row._id || row.schedule_id || row.scheduleId || "");
+      const name = normalizeCapacitySchedule(row.name || row.title || row.schedule_name || row.scheduleName || row.period || row.block || "");
+      if (id && name) out.set(name, id);
     });
     return out;
   }
