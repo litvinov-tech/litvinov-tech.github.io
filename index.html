@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JET Capacity Brain</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260705-11">
+    <link rel="stylesheet" href="./styles.css?v=20260706-2">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./app.js?v=20260706-1" defer></script>
+    <script src="./app.js?v=20260706-2" defer></script>
     <script src="./i18n.js?v=20260706-4" defer></script>
   </head>
   <body>
@@ -262,9 +262,12 @@
                     <h3>6. Как выбираются парковки для monitor</h3>
                     <ul>
                       <li>Сайт сортирует парковки по самому большому capacity: сначала самые важные.</li>
-                      <li>Фильтр <strong>Qtd. no monitor</strong> ограничивает выдачу: все, Top 50, Top 100, Top 300 и так далее.</li>
-                      <li>В monitor попадают строки с capacity <strong>2+</strong>.</li>
-                      <li>Если парковка уже есть в monitor, сайт обновляет capacity. Если нет, сайт добавляет новую строку.</li>
+                      <li>Общий фильтр <strong>Qtd. no monitor</strong> ограничивает выдачу: все, Top 50, Top 100 и т.д.</li>
+                      <li><strong>Лимиты по периодам</strong> (Seg-Qui DIA/NOITE, Sexta DIA/NOITE, Fim de semana) — можно задать своё количество на каждый период отдельно. «Usar geral» = брать общий лимит. Отбор <strong>независимый</strong>: у каждого периода свой топ по своему спросу, и одна и та же парковка может попасть сразу в несколько периодов (например, и в пятницу вечером, и в будни) — всё зависит от аренд.</li>
+                      <li><strong>Tech zone</strong> — фильтр по техзоне из файла аренд: считать только парковки выбранной зоны (старты и возвраты фильтруются по своей зоне). «Todas as zonas» = без фильтра.</li>
+                      <li><strong>Janela (h)</strong> — длина окна пика (2–12 ч): capacity = пик дефицита в худшем окне такой длины. Меньше окно — острее пики.</li>
+                      <li>В monitor попадают строки с capacity <strong>2+</strong>; capacity сохраняется как есть (2 остаётся 2).</li>
+                      <li>Если парковка уже есть в monitor — capacity обновляется, иначе добавляется новая строка.</li>
                     </ul>
                   </div>
 
@@ -283,9 +286,11 @@
                     <h3>8. Как пользоваться по шагам</h3>
                     <ol>
                       <li>Выбери город в <strong>Cidade</strong>.</li>
-                      <li>Нажми <strong>Загрузить аренды</strong> и выбери файл аренд.</li>
+                      <li>Нажми <strong>Загрузить аренды</strong> и выбери файл аренд (XLSX).</li>
+                      <li>При необходимости выбери <strong>Tech zone</strong> (если хочешь считать только по одной техзоне) и подстрой <strong>Janela (h)</strong>.</li>
+                      <li>Задай количество: общий <strong>Qtd. no monitor</strong> и/или отдельные <strong>лимиты по периодам</strong> (Seg-Qui DIA/NOITE, Sexta, Fim de semana). Меняются на лету — пересчёт сразу.</li>
                       <li>Нажми <strong>Собрать по арендам</strong>.</li>
-                      <li>Если сайт пишет, что нет parking_id, нажми <strong>All parkings</strong>.</li>
+                      <li>Если сайт пишет, что нет parking_id, нажми <strong>All parkings</strong> (или импортируй каталог).</li>
                       <li>Если нет schedule_id, нажми <strong>Monitor parkings</strong> или импортируй полный <strong>GoJet JSON</strong>.</li>
                       <li>Нажми <strong>Новый monitor CSV</strong> и проверь файл.</li>
                     </ol>
@@ -352,9 +357,12 @@
                     <h3>6. Como o site escolhe estacionamentos para o monitor</h3>
                     <ul>
                       <li>Ordena pelo maior capacity: primeiro os pontos mais importantes.</li>
-                      <li>O filtro <strong>Qtd. no monitor</strong> limita a saida: todos, Top 50, Top 100, Top 300 etc.</li>
-                      <li>Entram linhas com capacity <strong>2+</strong>.</li>
-                      <li>Se o estacionamento ja existe no monitor, o site atualiza o capacity. Se nao existe, adiciona nova linha.</li>
+                      <li>Filtro geral <strong>Qtd. no monitor</strong> limita a saida: todos, Top 50, Top 100 etc.</li>
+                      <li><strong>Limites por periodo</strong> (Seg-Qui DIA/NOITE, Sexta DIA/NOITE, Fim de semana) — defina uma quantidade para cada periodo. «Usar geral» = usa o limite geral. A selecao e <strong>independente</strong>: cada periodo tem seu proprio top pela sua demanda, e o mesmo estacionamento pode entrar em varios periodos (ex.: sexta a noite e nos dias uteis) conforme os alugueis.</li>
+                      <li><strong>Tech zone</strong> — filtra pela zona tecnica do arquivo de alugueis: conta so os pontos da zona escolhida (inicios e retornos filtrados por sua zona). «Todas as zonas» = sem filtro.</li>
+                      <li><strong>Janela (h)</strong> — tamanho da janela de pico (2–12 h): capacity = pico do deficit na pior janela desse tamanho.</li>
+                      <li>Entram linhas com capacity <strong>2+</strong>; o capacity e mantido como esta (2 continua 2).</li>
+                      <li>Se o estacionamento ja existe no monitor, atualiza o capacity; senao, adiciona nova linha.</li>
                     </ul>
                   </div>
 
@@ -373,9 +381,11 @@
                     <h3>8. Passo a passo</h3>
                     <ol>
                       <li>Escolha a cidade em <strong>Cidade</strong>.</li>
-                      <li>Clique em <strong>Carregar alugueis</strong> e selecione o arquivo de alugueis.</li>
+                      <li>Clique em <strong>Carregar alugueis</strong> e selecione o arquivo (XLSX).</li>
+                      <li>Se quiser, escolha a <strong>Tech zone</strong> e ajuste a <strong>Janela (h)</strong>.</li>
+                      <li>Defina a quantidade: <strong>Qtd. no monitor</strong> geral e/ou os <strong>limites por periodo</strong> (Seg-Qui DIA/NOITE, Sexta, Fim de semana). Recalcula na hora.</li>
                       <li>Clique em <strong>Montar pelos alugueis</strong>.</li>
-                      <li>Se faltar parking_id, clique em <strong>All parkings</strong>.</li>
+                      <li>Se faltar parking_id, clique em <strong>All parkings</strong> (ou importe o catalogo).</li>
                       <li>Se faltar schedule_id, clique em <strong>Monitor parkings</strong> ou importe o <strong>GoJet JSON</strong> completo.</li>
                       <li>Clique em <strong>Novo monitor CSV</strong> e confira o arquivo.</li>
                     </ol>
@@ -422,6 +432,48 @@
                 <span>Importar GoJet JSON</span>
               </button>
               <input id="gojetParkingsInput" type="file" accept=".json,application/json" hidden>
+            </div>
+            <div class="capacity-period-limits" aria-label="Limites por periodo e zona">
+              <label class="monitor-zone-control">
+                <span>Tech zone</span>
+                <select id="capacityZoneFilter">
+                  <option value="all">Todas as zonas</option>
+                </select>
+              </label>
+              <label>
+                <span>Seg-Qui DIA</span>
+                <select id="limitWeekdayDay">
+                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                </select>
+              </label>
+              <label>
+                <span>Seg-Qui NOITE</span>
+                <select id="limitWeekdayEvening">
+                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                </select>
+              </label>
+              <label>
+                <span>Sexta DIA</span>
+                <select id="limitFridayDay">
+                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                </select>
+              </label>
+              <label>
+                <span>Sexta NOITE</span>
+                <select id="limitFridayEvening">
+                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                </select>
+              </label>
+              <label>
+                <span>Fim de semana</span>
+                <select id="limitWeekend">
+                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                </select>
+              </label>
+              <label class="range-row">
+                <span>Janela (h): <strong id="capacityWindowValue">12</strong></span>
+                <input id="capacityWindow" type="range" min="2" max="12" step="1" value="12">
+              </label>
             </div>
             <div class="apps-bridge">
               <label>

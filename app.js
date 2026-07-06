@@ -59,12 +59,36 @@
   let goJetCityMapPromise = null;
   let goJetCityMap = new Map();
 
+  const CAPACITY_PERIOD_LIMIT_FIELDS = {
+    weekdayDay: "limitWeekdayDay",
+    weekdayEvening: "limitWeekdayEvening",
+    fridayDay: "limitFridayDay",
+    fridayEvening: "limitFridayEvening",
+    weekend: "limitWeekend",
+  };
+  // Which parking capacity field each period ranks/limits on.
+  const CAPACITY_PERIOD_TARGET_FIELDS = {
+    weekdayDay: "targetDay",
+    weekdayEvening: "targetEvening",
+    fridayDay: "targetFridayDay",
+    fridayEvening: "targetFridayEvening",
+    weekend: "targetWeekend",
+  };
+
   const defaults = {
     lookbackDays: 21,
     leadMinutes: 45,
     minRides: 3,
     topLimit: 24,
+    capacityWindow: 12,
     monitorParkingLimit: "all",
+    monitorPeriodLimits: {
+      weekdayDay: "same",
+      weekdayEvening: "same",
+      fridayDay: "same",
+      fridayEvening: "same",
+      weekend: "same",
+    },
     planMode: "now",
   };
 
@@ -146,6 +170,8 @@
     [
       "statusPill", "statusText", "refreshBtn", "dropZone", "fileInput", "uploadBtn",
       "lastUploadText", "lookbackDays", "leadMinutes", "minRides", "topLimit", "monitorParkingLimit",
+      "limitWeekdayDay", "limitWeekdayEvening", "limitFridayDay", "limitFridayEvening", "limitWeekend", "capacityZoneFilter",
+      "capacityWindow", "capacityWindowValue",
       "lookbackValue", "leadValue", "minRidesValue", "topLimitValue",
       "exportHistoryBtn", "importHistoryBtn", "historyInput", "exportCsvBtn", "clearBtn",
       "uploadCount", "uploadList", "kpiRides", "kpiParkings", "kpiDays", "kpiConfidence",
@@ -248,8 +274,25 @@
     els.monitorParkingLimit?.addEventListener("change", () => {
       state.settings.monitorParkingLimit = cleanText(els.monitorParkingLimit.value) || "all";
       persistSettingsSoon();
-      recomputeCapacityCompare();
-      renderCapacityCompare();
+      rebuildRentalCapacityRows();
+    });
+    Object.entries(CAPACITY_PERIOD_LIMIT_FIELDS).forEach(([period, id]) => {
+      els[id]?.addEventListener("change", () => {
+        state.settings.monitorPeriodLimits = { ...defaults.monitorPeriodLimits, ...(state.settings.monitorPeriodLimits || {}) };
+        state.settings.monitorPeriodLimits[period] = cleanText(els[id].value) || "same";
+        persistSettingsSoon();
+        rebuildRentalCapacityRows();
+      });
+    });
+    els.capacityZoneFilter?.addEventListener("change", () => {
+      state.capacity.zoneFilter = cleanText(els.capacityZoneFilter.value) || "all";
+      rebuildRentalCapacityRows();
+    });
+    els.capacityWindow?.addEventListener("input", () => {
+      state.settings.capacityWindow = clamp(Number(els.capacityWindow.value) || 12, 2, 12);
+      if (els.capacityWindowValue) els.capacityWindowValue.textContent = state.settings.capacityWindow;
+      persistSettingsSoon();
+      rebuildRentalCapacityRows();
     });
     els.appsScriptLoginBtn?.addEventListener("click", loginAppsScriptBridge);
 
@@ -366,6 +409,15 @@
     });
   }
 
+  function normalizeSettings(incoming) {
+    const src = incoming || {};
+    return {
+      ...defaults,
+      ...src,
+      monitorPeriodLimits: { ...defaults.monitorPeriodLimits, ...(src.monitorPeriodLimits || {}) },
+    };
+  }
+
   async function loadState() {
     const [rides, uploads, settings] = await Promise.all([
       getAll(STORE_RIDES),
@@ -374,7 +426,7 @@
     ]);
     state.rides = rides;
     state.uploads = uploads.sort((a, b) => b.importedAt - a.importedAt);
-    state.settings = { ...defaults, ...(settings || {}) };
+    state.settings = normalizeSettings(settings);
   }
 
   let settingsTimer = null;
@@ -393,6 +445,11 @@
     els.minRidesValue.textContent = state.settings.minRides;
     els.topLimitValue.textContent = state.settings.topLimit;
     if (els.monitorParkingLimit) els.monitorParkingLimit.value = state.settings.monitorParkingLimit || "all";
+    Object.entries(CAPACITY_PERIOD_LIMIT_FIELDS).forEach(([period, id]) => {
+      if (els[id]) els[id].value = state.settings.monitorPeriodLimits?.[period] || "same";
+    });
+    if (els.capacityWindow) els.capacityWindow.value = state.settings.capacityWindow || 12;
+    if (els.capacityWindowValue) els.capacityWindowValue.textContent = state.settings.capacityWindow || 12;
     document.querySelectorAll("[data-plan-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.planMode === state.settings.planMode);
     });
@@ -953,6 +1010,8 @@
       parkingKey: normalizeSearch(parkingName || "No zone"),
       endName: endName || "",
       endKey: normalizeSearch(endName || ""),
+      zone: techZoneName(firstValue(row, ["Тех. зона начала", "Тех.зона начала", "Тарифная зона аренды"])),
+      endZone: techZoneName(firstValue(row, ["Тех. зона завершения", "Тех.зона завершения"])),
       isParkingSignal: isUsableParking(rawParkingName) || Boolean(startCoords && pointInBh(startCoords)),
       needsNameResolution,
       scooter,
@@ -974,7 +1033,25 @@
 
   function recompute() {
     state.analysis = analyze(state.rides, state.settings);
+    populateZoneFilter();
     renderAll();
+  }
+
+  // Fill the tech-zone selector from zones present in the loaded rentals (start+end).
+  function populateZoneFilter() {
+    const sel = els.capacityZoneFilter;
+    if (!sel) return;
+    const zones = new Set();
+    (state.rides || []).forEach((ride) => {
+      if (ride.zone) zones.add(ride.zone);
+      if (ride.endZone) zones.add(ride.endZone);
+    });
+    const current = cleanText(state.capacity?.zoneFilter || sel.value || "all");
+    const sorted = [...zones].filter(Boolean).sort((a, b) => a.localeCompare(b));
+    sel.innerHTML = `<option value="all">Todas as zonas</option>` +
+      sorted.map((z) => `<option value="${esc(z)}">${esc(z)}</option>`).join("");
+    sel.value = sorted.includes(current) ? current : "all";
+    if (state.capacity) state.capacity.zoneFilter = sel.value;
   }
 
   function analyze(rides, settings) {
@@ -1384,7 +1461,7 @@
       await putMany(STORE_RIDES, rides);
       await putMany(STORE_UPLOADS, uploads);
       if (payload.settings) {
-        state.settings = { ...defaults, ...payload.settings };
+        state.settings = normalizeSettings(payload.settings);
         await putMeta(SETTINGS_KEY, state.settings);
         renderSettings();
       }
@@ -2306,6 +2383,31 @@
     return sliced.map((row, index) => ({ ...row, rank: index + 1 }));
   }
 
+  // Resolve a period selector value to a numeric Top-N (Infinity = all, 0 = none,
+  // "same" = fall back to the general Qtd. no monitor limit).
+  function periodLimitValue(period) {
+    const raw = cleanText(state.settings.monitorPeriodLimits?.[period] || "same");
+    if (raw === "same" || raw === "") return monitorParkingLimitValue();
+    if (raw === "all") return Infinity;
+    if (raw === "0") return 0;
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : Infinity;
+  }
+
+  // Independent Top-N per period: rank rows by this period's capacity field and
+  // zero the field for rows outside the top-N, so the period simply drops those
+  // parkings. A parking can still qualify in other periods (no cross-exclusion).
+  function applyPeriodTopN(rows, period) {
+    const field = CAPACITY_PERIOD_TARGET_FIELDS[period];
+    const limit = periodLimitValue(period);
+    if (limit === Infinity) return;
+    const ranked = rows
+      .filter((row) => (Number(row[field]) || 0) >= 2)
+      .sort((a, b) => (Number(b[field]) || 0) - (Number(a[field]) || 0));
+    const keep = new Set(ranked.slice(0, limit).map((row) => row.key));
+    rows.forEach((row) => { if (!keep.has(row.key)) row[field] = 0; });
+  }
+
   function buildRentalCapacityRows(rides) {
     const usable = (rides || []).filter((ride) => sameCity(ride.city) && ride.ts);
     const latestTs = usable.reduce((max, ride) => Math.max(max, ride.ts || 0), 0);
@@ -2321,11 +2423,13 @@
       weekend: createRentalCapacityGroup("\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435"),
     };
 
+    const zoneFilter = cleanText(state.capacity?.zoneFilter || "all");
+    const zoneOn = zoneFilter && zoneFilter !== "all";
     recent.forEach((ride) => {
-      if (ride.isParkingSignal && isUsableParking(ride.parkingName)) {
+      if (ride.isParkingSignal && isUsableParking(ride.parkingName) && (!zoneOn || ride.zone === zoneFilter)) {
         addRentalCapacityEvent(groups, ride.weekday, ride.dateKey, ride.hour, ride.parkingName, ride.parkingKey, "start", ride);
       }
-      if (isUsableParking(ride.endName)) {
+      if (isUsableParking(ride.endName) && (!zoneOn || ride.endZone === zoneFilter)) {
         const endMeta = rentalEndMeta(ride);
         addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, normalizeSearch(ride.endName), "end", ride);
       }
@@ -2367,15 +2471,24 @@
       merged.set(row.key, base);
     });
 
-    const sourceRowsAll = [...merged.values()]
+    // Independent Top-N per period: each period keeps its own strongest parkings by
+    // its own demand. The same parking can qualify in several periods at once
+    // (e.g. sexta noite \u0438 \u0431\u0443\u0434\u043d\u0438), depending on rental starts/returns in each period.
+    const candidates = [...merged.values()];
+    ["weekdayDay", "weekdayEvening", "fridayDay", "fridayEvening"].forEach((period) => applyPeriodTopN(candidates, period));
+    const sourceRows = candidates
       .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0) >= 2)
-      .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0));
-    const sourceRows = applyMonitorParkingLimit(sourceRowsAll);
+      .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0))
+      .map((row, index) => ({ ...row, rank: index + 1 }));
 
-    const weekendRowsAll = weekendRowsRaw
+    const weekendCandidates = weekendRowsRaw
       .filter((row) => row.targetWeekend >= 2)
       .map((row) => ({ ...row, blockSummary: `\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435 ${row.targetWeekend}` }));
-    const weekendRows = applyMonitorParkingLimit(weekendRowsAll);
+    applyPeriodTopN(weekendCandidates, "weekend");
+    const weekendRows = weekendCandidates
+      .filter((row) => (row.targetWeekend || 0) >= 2)
+      .sort((a, b) => (b.targetWeekend || 0) - (a.targetWeekend || 0))
+      .map((row, index) => ({ ...row, rank: index + 1 }));
 
     return {
       sourceRows,
@@ -2457,11 +2570,14 @@
       const capsAll = [];
       const capsDay = [];
       const capsEvening = [];
+      const winH = clamp(Number(state.settings.capacityWindow) || 12, 2, 12);
+      const dayStarts = Array.from({ length: 12 }, (_, hour) => hour);
+      const eveningStarts = Array.from({ length: 12 }, (_, hour) => hour + 12);
       days.forEach((day) => {
         const matrix = item.days.get(day) || emptyRentalDayMatrix();
-        capsAll.push(rentalMaxDeficit(matrix, Array.from({ length: 24 }, (_, hour) => hour)));
-        capsDay.push(rentalMaxDeficit(matrix, Array.from({ length: 12 }, (_, hour) => hour)));
-        capsEvening.push(rentalMaxDeficit(matrix, Array.from({ length: 12 }, (_, hour) => hour + 12)));
+        capsAll.push(rentalMaxDeficit(matrix, [0], 24));
+        capsDay.push(rentalMaxDeficit(matrix, dayStarts, winH));
+        capsEvening.push(rentalMaxDeficit(matrix, eveningStarts, winH));
       });
       const rawAll = Math.ceil(avg(capsAll));
       const rawDay = Math.ceil(avg(capsDay));
@@ -2495,15 +2611,22 @@
     return Array.from({ length: 24 }, () => ({ dep: 0, arr: 0 }));
   }
 
-  function rentalMaxDeficit(matrix, hours) {
-    let cumulative = 0;
-    let peak = 0;
-    hours.forEach((hour) => {
-      const bucket = matrix[hour] || {};
-      cumulative += (bucket.dep || 0) - (bucket.arr || 0);
-      if (cumulative > peak) peak = cumulative;
-    });
-    return peak;
+  // Peak cumulative net deficit (departures - arrivals) inside the worst winH-hour
+  // window whose start is in startHours (hours wrap past midnight). Matches the
+  // sliding-window method used by the reference dashboard.
+  function rentalMaxDeficit(matrix, startHours, winH = 12) {
+    let best = 0;
+    for (const start of startHours) {
+      let cumulative = 0;
+      let peak = 0;
+      for (let i = 0; i < winH; i += 1) {
+        const bucket = matrix[(start + i) % 24] || {};
+        cumulative += (bucket.dep || 0) - (bucket.arr || 0);
+        if (cumulative > peak) peak = cumulative;
+      }
+      if (peak > best) best = peak;
+    }
+    return best;
   }
 
   function capacityExportMinimum(value) {
@@ -2608,6 +2731,19 @@
       console.error(err);
       toast(`${file.name}: ${err.message}`, true);
     }
+  }
+
+  // Recompute capacity rows from already-loaded rides (no network). Used when a
+  // period limit / window / zone filter changes so gating re-applies instantly.
+  function rebuildRentalCapacityRows() {
+    if (!state.rides?.length) { recomputeCapacityCompare(); renderCapacityCompare(); return; }
+    const built = buildRentalCapacityRows(state.rides);
+    state.capacity.sourceRows = built.sourceRows;
+    state.capacity.weekendRows = built.weekendRows;
+    state.capacity.autoRental = built.summary;
+    recomputeCapacityCompare();
+    renderCapacityCompare();
+    renderAutoCapacitySummary();
   }
 
   function recomputeCapacityCompare() {
@@ -3539,6 +3675,13 @@
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  // Tech zone from the rental export, e.g. "Curitiba Centro,Куритиба" -> "Curitiba Centro".
+  function techZoneName(value) {
+    const text = cleanText(value);
+    if (!text) return "";
+    return text.split(",")[0].trim();
   }
 
   function normalizeParkingName(value) {

@@ -705,6 +705,43 @@ tr:last-child td {
   margin-top: 12px;
 }
 
+.capacity-period-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.capacity-period-limits label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.capacity-period-limits label span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  opacity: .8;
+}
+
+.capacity-period-limits select,
+.capacity-period-limits input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(130, 231, 222, .28);
+  border-radius: 8px;
+  background: rgba(7, 21, 29, .95);
+  color: #f7feff;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.capacity-period-limits .monitor-zone-control select {
+  border-color: rgba(34, 243, 189, .4);
+}
+
 .capacity-citybar label {
   display: grid;
   gap: 5px;
