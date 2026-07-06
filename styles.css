@@ -1841,3 +1841,124 @@ button:disabled,
     min-height: 52px;
   }
 }
+/* Manual / workflow explanation */
+.manual-panel {
+  margin: 14px 0 16px;
+  padding: 0;
+  border: 1px solid rgba(34, 243, 189, .28);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(6, 24, 32, .92), rgba(5, 15, 22, .88));
+  box-shadow: 0 18px 50px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06);
+  overflow: hidden;
+}
+
+.manual-panel summary {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.manual-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.manual-panel summary span {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(34, 243, 189, .14);
+  color: #22f3bd;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.manual-panel summary strong {
+  color: #f7feff;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.manual-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.manual-grid div,
+.manual-note {
+  border: 1px solid rgba(130, 231, 222, .14);
+  border-radius: 10px;
+  background: rgba(3, 13, 19, .64);
+}
+
+.manual-grid div {
+  min-height: 142px;
+  padding: 12px;
+}
+
+.manual-grid h3 {
+  color: #ffffff;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.manual-grid p,
+.manual-note span {
+  margin: 0;
+  color: #cfe6ee;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.manual-grid strong,
+.manual-note strong {
+  color: #f7feff;
+}
+
+.manual-grid a {
+  color: #7ceeff;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.manual-grid a:hover {
+  text-decoration: underline;
+}
+
+.manual-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 14px 14px;
+  padding: 12px;
+  border-color: rgba(255, 214, 102, .25);
+  background: rgba(42, 32, 8, .45);
+}
+
+.manual-note strong {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1480px) {
+  .manual-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .manual-panel summary {
+    grid-template-columns: 1fr;
+  }
+  .manual-grid {
+    grid-template-columns: 1fr;
+  }
+  .manual-note {
+    display: grid;
+  }
+}
