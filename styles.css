@@ -2087,3 +2087,43 @@ button:disabled,
     grid-template-columns: 1fr;
   }
 }
+/* Collapsible manual controls */
+.manual-panel summary {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.manual-panel summary::after {
+  content: "Показать";
+  min-width: 98px;
+  padding: 8px 12px;
+  border: 1px solid rgba(34, 243, 189, .28);
+  border-radius: 999px;
+  color: #091119;
+  background: linear-gradient(135deg, #22f3bd, #2db7ff);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.manual-panel[open] summary::after {
+  content: "Скрыть";
+  color: #dff7ff;
+  background: rgba(8, 25, 34, .92);
+}
+
+.manual-panel:not([open]) {
+  margin-bottom: 12px;
+}
+
+.manual-panel:not([open]) summary {
+  border-bottom: 0;
+}
+
+@media (max-width: 760px) {
+  .manual-panel summary {
+    grid-template-columns: 1fr;
+  }
+  .manual-panel summary::after {
+    width: 100%;
+  }
+}
