@@ -282,7 +282,8 @@
     nodes.forEach((node) => {
       if (shouldSkipTextNode(node)) return;
       if (node.__jetOriginalText == null) node.__jetOriginalText = node.nodeValue;
-      node.nodeValue = translateText(node.__jetOriginalText);
+      const next = translateText(node.__jetOriginalText);
+      if (node.nodeValue !== next) node.nodeValue = next;
     });
   }
 
@@ -321,16 +322,18 @@
   function init() {
     bindLanguageSwitches();
     applyLanguage();
-    const observer = new MutationObserver((records) => {
-      if (applying) return;
-      for (const record of records) {
-        record.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) applyLanguage(node);
-          if (node.nodeType === Node.TEXT_NODE && node.parentElement) applyLanguage(node.parentElement);
-        });
-      }
+    let observerTimer = null;
+    const observerOptions = { childList: true, subtree: true };
+    const observer = new MutationObserver(() => {
+      if (applying || observerTimer) return;
+      observerTimer = setTimeout(() => {
+        observerTimer = null;
+        observer.disconnect();
+        applyLanguage();
+        observer.observe(document.body, observerOptions);
+      }, 120);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, observerOptions);
   }
 
   if (document.readyState === "loading") {
