@@ -2368,12 +2368,12 @@
     });
 
     const sourceRowsAll = [...merged.values()]
-      .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0) >= 4)
+      .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0) >= 2)
       .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0));
     const sourceRows = applyMonitorParkingLimit(sourceRowsAll);
 
     const weekendRowsAll = weekendRowsRaw
-      .filter((row) => row.targetWeekend >= 4)
+      .filter((row) => row.targetWeekend >= 2)
       .map((row) => ({ ...row, blockSummary: `\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435 ${row.targetWeekend}` }));
     const weekendRows = applyMonitorParkingLimit(weekendRowsAll);
 
@@ -2469,7 +2469,7 @@
       const targetDay = capacityExportMinimum(rawDay);
       const targetEvening = capacityExportMinimum(rawEvening);
       const targetWeekend = capacityExportMinimum(rawAll || Math.max(rawDay, rawEvening));
-      if (Math.max(targetDay, targetEvening, targetWeekend) < 4) return;
+      if (Math.max(targetDay, targetEvening, targetWeekend) < 2) return;
       const startsPerDay = item.starts / Math.max(1, days.length);
       const finishesPerDay = item.ends / Math.max(1, days.length);
       rows.push({
@@ -2508,7 +2508,7 @@
 
   function capacityExportMinimum(value) {
     const rounded = Math.round(Number(value) || 0);
-    return rounded >= 2 ? Math.max(4, rounded) : 0;
+    return rounded >= 2 ? rounded : 0;
   }
 
   function avg(values) {
@@ -2559,7 +2559,7 @@
     els.monitorSuggestionList.innerHTML = rows.slice(0, 10).map((row, index) => `
       <div class="compact-item monitor-add-item">
         <strong>${index + 1}. ${esc(row.parking)}</strong>
-        <span>${esc(row.kind)} | ${esc(row.targetLabel || "capacity 2+ / min 4")} | score ${esc(row.matchScore || 0)}</span>
+        <span>${esc(row.kind)} | ${esc(row.targetLabel || "capacity 2+")} | score ${esc(row.matchScore || 0)}</span>
       </div>
     `).join("");
   }
@@ -2572,7 +2572,7 @@
       state.capacity.sourceFileName = file.name;
       recomputeCapacityCompare();
       renderCapacityCompare();
-      toast(`${file.name}: capacity 2+ -> min 4 ${fmtInt(rows.length)}`);
+      toast(`${file.name}: capacity 2+ ${fmtInt(rows.length)}`);
     } catch (err) {
       console.error(err);
       toast(`${file.name}: ${err.message}`, true);
@@ -2659,7 +2659,7 @@
     (state.capacity.sourceRows || []).forEach((row) => put(row, "regular"));
     (state.capacity.weekendRows || []).forEach((row) => put(row, "weekend"));
     return [...merged.values()]
-      .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0, row.targetWeekend || 0) >= 4)
+      .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0, row.targetWeekend || 0) >= 2)
       .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0, b.targetWeekend || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0, a.targetWeekend || 0));
   }
 
@@ -2707,12 +2707,12 @@
         balance: cleanText(row[4]),
         zoneType: cleanText(row[9]),
         capTotal,
-        targetDay: Math.max(4, capDayRaw),
-        targetEvening: Math.max(4, capEveningRaw),
-        targetWeekend: Math.max(4, capTotal || capDayRaw || capEveningRaw),
+        targetDay: capDayRaw >= 2 ? capDayRaw : 0,
+        targetEvening: capEveningRaw >= 2 ? capEveningRaw : 0,
+        targetWeekend: (capTotal || capDayRaw || capEveningRaw) >= 2 ? (capTotal || capDayRaw || capEveningRaw) : 0,
       };
     }).filter(Boolean);
-    if (!rows.length) throw new Error("не нашел строк capacity 2+ / min 4");
+    if (!rows.length) throw new Error("не нашел строк capacity 2+");
     return rows;
   }
 
@@ -2808,7 +2808,7 @@
         { schedule: CAPACITY_FRIDAY_EVENING_SCHEDULE, expected: row.targetFridayEvening, label: "friday evening" },
         { schedule: CAPACITY_WEEKEND_SCHEDULE, expected: row.targetWeekend, label: "weekend" },
       ].forEach(({ schedule, expected, label }) => {
-        if (!expected || Number(expected) < 4) return;
+        if (!expected || Number(expected) < 2) return;
         const actual = item.capacities[schedule];
         if (actual == null) {
           mismatches.push({ ...base, monitorParking: item.name, schedule, label, expected, actual: "", difference: "", problem: "missing schedule" });
@@ -3110,7 +3110,7 @@
       targets.push({ row, schedule: CAPACITY_FRIDAY_EVENING_SCHEDULE, capacity: fridayEvening, source: "friday" });
     });
     weekendRows.forEach((row) => {
-      targets.push({ row, schedule: CAPACITY_WEEKEND_SCHEDULE, capacity: row.targetWeekend || row.capTotal || Math.max(row.targetDay || 0, row.targetEvening || 0, 4), source: "weekend" });
+      targets.push({ row, schedule: CAPACITY_WEEKEND_SCHEDULE, capacity: row.targetWeekend || row.capTotal || Math.max(row.targetDay || 0, row.targetEvening || 0), source: "weekend" });
     });
 
     let updated = 0;
@@ -3121,7 +3121,7 @@
     const resolvedParkingCache = new Map();
 
     targets.forEach((target) => {
-      if (!target.capacity || target.capacity < 4) return;
+      if (!target.capacity || target.capacity < 2) return;
       const scheduleId = scheduleIds.get(target.schedule) || capacityScheduleId(selectedCity, target.schedule) || "";
       if (!scheduleId) {
         skipped.push({ name: target.row.name, schedule: target.schedule, reason: "schedule_id missing for selected city; exported with empty schedule_id" });
@@ -3204,9 +3204,6 @@
       if (isKnownForeignScheduleId(selectedCity, currentScheduleId)) setCell(cells, indices.scheduleId, "");
       if (schedule && !cellAt(cells, indices.scheduleId)) setCell(cells, indices.scheduleId, capacityScheduleId(selectedCity, schedule));
       if (schedule && !cellAt(cells, indices.scheduleId)) skipped.push({ name: parkingName || "unknown", schedule, reason: "schedule_id missing for selected city" });
-
-      const capacityValue = Number(cellAt(cells, indices.capacity));
-      if (Number.isFinite(capacityValue) && capacityValue > 0 && capacityValue < 4) setCell(cells, indices.capacity, 4);
 
       if (!cellAt(cells, indices.parkingId)) {
         const candidate = {
