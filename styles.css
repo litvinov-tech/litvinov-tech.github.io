@@ -2158,6 +2158,8 @@ button:disabled,
   text-align: center;
   cursor: pointer;
   user-select: none;
+  border: 0;
+  background: transparent;
 }
 
 #manualLangRu:checked ~ .manual-language-tabs label[for="manualLangRu"],
@@ -2190,6 +2192,8 @@ button:disabled,
 }
 /* Full site language switch */
 .site-language-switch {
+  position: relative;
+  z-index: 30;
   height: 34px;
   display: inline-flex;
   align-items: center;
@@ -2207,7 +2211,9 @@ button:disabled,
   pointer-events: none;
 }
 
-.site-language-switch label {
+.site-language-switch button {
+  position: relative;
+  z-index: 1;
   min-width: 38px;
   height: 24px;
   display: inline-flex;
@@ -2219,10 +2225,11 @@ button:disabled,
   font-weight: 900;
   cursor: pointer;
   user-select: none;
+  border: 0;
+  background: transparent;
 }
 
-#siteLangRu:checked ~ label[for="siteLangRu"],
-#siteLangPt:checked ~ label[for="siteLangPt"] {
+.site-language-switch button.active {
   color: #071119;
   background: linear-gradient(135deg, #22f3bd, #2db7ff);
   box-shadow: 0 0 18px rgba(34, 243, 189, .26);

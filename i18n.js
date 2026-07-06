@@ -208,8 +208,9 @@
 
   function setText(selector, pair) {
     document.querySelectorAll(selector).forEach((node) => {
-      node.textContent = valueFor(pair);
-      node.__jetOriginalText = pair.ru || node.textContent;
+      const next = valueFor(pair);
+      if (node.textContent !== next) node.textContent = next;
+      node.__jetOriginalText = pair.ru || next;
     });
   }
 
@@ -220,8 +221,12 @@
     const sitePt = document.getElementById("siteLangPt");
     const manualRu = document.getElementById("manualLangRu");
     const manualPt = document.getElementById("manualLangPt");
-    if (siteRu) siteRu.checked = lang === "ru";
-    if (sitePt) sitePt.checked = lang === "pt";
+    [siteRu, sitePt].forEach((button) => {
+      if (!button) return;
+      const active = button.dataset.siteLang === lang;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
     if (manualRu) manualRu.checked = lang === "ru";
     if (manualPt) manualPt.checked = lang === "pt";
 
@@ -230,7 +235,8 @@
       document.querySelectorAll(selector).forEach((node, index) => {
         const pair = pairs[index];
         if (pair) {
-          node.textContent = valueFor(pair);
+          const next = valueFor(pair);
+          if (node.textContent !== next) node.textContent = next;
           node.__jetOriginalText = pair.ru;
         }
       });
@@ -293,10 +299,23 @@
   }
 
   function bindLanguageSwitches() {
-    document.getElementById("siteLangRu")?.addEventListener("change", () => setLanguage("ru"));
-    document.getElementById("siteLangPt")?.addEventListener("change", () => setLanguage("pt"));
-    document.getElementById("manualLangRu")?.addEventListener("change", () => setLanguage("ru"));
-    document.getElementById("manualLangPt")?.addEventListener("change", () => setLanguage("pt"));
+    document.querySelectorAll("[data-site-lang]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        setLanguage(button.dataset.siteLang);
+      });
+    });
+    const bindManualRadio = (id, lang) => {
+      const input = document.getElementById(id);
+      const label = document.querySelector(`label[for="${id}"]`);
+      input?.addEventListener("change", () => setLanguage(lang));
+      label?.addEventListener("click", (event) => {
+        event.preventDefault();
+        setLanguage(lang);
+      });
+    };
+    bindManualRadio("manualLangRu", "ru");
+    bindManualRadio("manualLangPt", "pt");
   }
 
   function init() {
@@ -310,7 +329,6 @@
           if (node.nodeType === Node.TEXT_NODE && node.parentElement) applyLanguage(node.parentElement);
         });
       }
-      applyStatic();
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }

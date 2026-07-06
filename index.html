@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
     <script src="./app.js?v=20260705-23" defer></script>
-    <script src="./i18n.js?v=20260706-1" defer></script>
+    <script src="./i18n.js?v=20260706-3" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -20,10 +20,8 @@
         </div>
         <div class="top-actions">
           <div class="site-language-switch" aria-label="Site language">
-            <input id="siteLangRu" name="siteLang" type="radio" value="ru" checked>
-            <input id="siteLangPt" name="siteLang" type="radio" value="pt">
-            <label for="siteLangRu">RU</label>
-            <label for="siteLangPt">PT</label>
+            <button id="siteLangRu" class="active" type="button" data-site-lang="ru" aria-pressed="true">RU</button>
+            <button id="siteLangPt" type="button" data-site-lang="pt" aria-pressed="false">PT</button>
           </div>
           <div class="status-pill" id="statusPill">
             <span class="status-dot"></span>
