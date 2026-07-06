@@ -285,7 +285,7 @@
       });
     });
     els.capacityZoneFilter?.addEventListener("change", () => {
-      state.capacity.zoneFilter = cleanText(els.capacityZoneFilter.value) || "all";
+      state.capacity.zoneFilter = Array.from(els.capacityZoneFilter.selectedOptions).map((o) => o.value);
       rebuildRentalCapacityRows();
     });
     els.capacityWindow?.addEventListener("input", () => {
@@ -1046,12 +1046,12 @@
       zoneListOf(ride.zone).forEach((z) => zones.add(z));
       zoneListOf(ride.endZone).forEach((z) => zones.add(z));
     });
-    const current = cleanText(state.capacity?.zoneFilter || sel.value || "all");
+    const currentSel = new Set(zoneListOf(state.capacity?.zoneFilter).filter((z) => z && z !== "all"));
     const sorted = [...zones].filter(Boolean).sort((a, b) => a.localeCompare(b));
-    sel.innerHTML = `<option value="all">Todas as zonas</option>` +
-      sorted.map((z) => `<option value="${esc(z)}">${esc(z)}</option>`).join("");
-    sel.value = sorted.includes(current) ? current : "all";
-    if (state.capacity) state.capacity.zoneFilter = sel.value;
+    sel.innerHTML = sorted
+      .map((z) => `<option value="${esc(z)}"${currentSel.has(z) ? " selected" : ""}>${esc(z)}</option>`)
+      .join("");
+    if (state.capacity) state.capacity.zoneFilter = sorted.filter((z) => currentSel.has(z));
   }
 
   function analyze(rides, settings) {
@@ -2432,13 +2432,15 @@
       weekend: createRentalCapacityGroup("\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435"),
     };
 
-    const zoneFilter = cleanText(state.capacity?.zoneFilter || "all");
-    const zoneOn = zoneFilter && zoneFilter !== "all";
+    const selectedZones = zoneListOf(state.capacity?.zoneFilter).filter((z) => z && z !== "all");
+    const zoneSet = new Set(selectedZones);
+    const zoneOn = zoneSet.size > 0;
+    const inZone = (list) => zoneListOf(list).some((z) => zoneSet.has(z));
     recent.forEach((ride) => {
-      if (ride.isParkingSignal && isUsableParking(ride.parkingName) && (!zoneOn || zoneListOf(ride.zone).includes(zoneFilter))) {
+      if (ride.isParkingSignal && isUsableParking(ride.parkingName) && (!zoneOn || inZone(ride.zone))) {
         addRentalCapacityEvent(groups, ride.weekday, ride.dateKey, ride.hour, ride.parkingName, ride.parkingKey, "start", ride);
       }
-      if (isUsableParking(ride.endName) && (!zoneOn || zoneListOf(ride.endZone).includes(zoneFilter))) {
+      if (isUsableParking(ride.endName) && (!zoneOn || inZone(ride.endZone))) {
         const endMeta = rentalEndMeta(ride);
         addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, normalizeSearch(ride.endName), "end", ride);
       }

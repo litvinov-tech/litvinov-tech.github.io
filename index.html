@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JET Capacity Brain</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260706-2">
+    <link rel="stylesheet" href="./styles.css?v=20260706-9">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./app.js?v=20260706-3" defer></script>
+    <script src="./app.js?v=20260706-9" defer></script>
     <script src="./i18n.js?v=20260706-4" defer></script>
   </head>
   <body>
@@ -435,10 +435,8 @@
             </div>
             <div class="capacity-period-limits" aria-label="Limites por periodo e zona">
               <label class="monitor-zone-control">
-                <span>Tech zone</span>
-                <select id="capacityZoneFilter">
-                  <option value="all">Todas as zonas</option>
-                </select>
+                <span>Tech zone (Ctrl+клик = неск.)</span>
+                <select id="capacityZoneFilter" multiple size="4"></select>
               </label>
               <label>
                 <span>Seg-Qui DIA</span>
