@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JET Capacity Brain</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260705-9">
+    <link rel="stylesheet" href="./styles.css?v=20260705-10">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
     <script src="./app.js?v=20260705-22" defer></script>
@@ -190,96 +190,197 @@
 
             <details class="manual-panel">
               <summary>
-                <span>Мануал</span>
-                <strong>Что делает сайт и по каким правилам считает capacity</strong>
+                <span>Мануал / Manual</span>
+                <strong>Правила расчета capacity / Regras de capacity</strong>
               </summary>
 
-              <div class="manual-lead">
-                <strong>Главная идея:</strong>
-                <span>сайт не смотрит “сколько самокатов стоит сейчас”. Он берет историю аренд и считает, сколько самокатов должно быть на парковке в начале блока, чтобы покрыть пиковый спрос. Если из парковки за утро уехало больше, чем приехало, это и есть дефицит, из которого строится capacity.</span>
-              </div>
-
-              <div class="manual-section">
-                <h3>1. Что нужно загрузить</h3>
-                <ol>
-                  <li><strong>Аренды XLSX/CSV</strong>: файл с поездками. Сайт берет город, время старта, парковку старта, парковку финиша, длительность/время финиша и координаты, если они есть.</li>
-                  <li><strong>All parkings</strong>: каталог парковок GoJet по выбранному городу. Отсюда берутся точные <strong>parking_id</strong>, название и координаты.</li>
-                  <li><strong>Monitor parkings / GoJet JSON</strong>: текущие правила монитора. Отсюда берутся <strong>schedule_id</strong> и уже существующие строки monitor.</li>
-                </ol>
-              </div>
-
-              <div class="manual-section">
-                <h3>2. Какие аренды попадают в расчет</h3>
-                <ul>
-                  <li>Берется только выбранный город в поле <strong>Cidade</strong>.</li>
-                  <li>Берется период из настройки <strong>История</strong>: последние N дней от самой свежей аренды в файле.</li>
-                  <li>Старт аренды считается как спрос на самокат: <strong>dep +1</strong> в час старта на парковке старта.</li>
-                  <li>Финиш аренды считается как возврат самоката: <strong>arr +1</strong> в час финиша на парковке финиша.</li>
-                  <li>Если точного времени финиша нет, сайт берет старт + длительность аренды.</li>
-                </ul>
-              </div>
-
-              <div class="manual-section manual-rules">
-                <h3>3. Блоки времени</h3>
-                <div class="manual-rule-grid">
-                  <div><strong>Будни</strong><span>Понедельник-четверг</span><b>Утро 00:00-11:59<br>Вечер 12:00-23:59</b></div>
-                  <div><strong>Пятница</strong><span>Отдельный день</span><b>День 00:00-11:59<br>Вечер 12:00-23:59</b></div>
-                  <div><strong>Выходные</strong><span>Суббота и воскресенье</span><b>Один общий блок<br>00:00-23:59</b></div>
+              <div class="manual-language-switch">
+                <input id="manualLangRu" name="manualLang" type="radio" checked>
+                <input id="manualLangPt" name="manualLang" type="radio">
+                <div class="manual-language-tabs" aria-label="Переключатель языка мануала">
+                  <label for="manualLangRu">Русский</label>
+                  <label for="manualLangPt">Português</label>
                 </div>
-              </div>
 
-              <div class="manual-section">
-                <h3>4. Формула capacity</h3>
-                <p>Для каждой парковки и каждого дня сайт строит часы блока и идет по ним сверху вниз:</p>
-                <div class="formula-box">
-                  <code>накопленный дефицит += старты - финиши</code>
-                  <code>пик дня = максимум накопленного дефицита</code>
-                  <code>capacity блока = ceil(средний пик по дням)</code>
+                <div class="manual-copy manual-content-ru">
+                  <div class="manual-lead">
+                    <strong>Главная идея:</strong>
+                    <span>сайт не смотрит “сколько самокатов стоит сейчас”. Он берет историю аренд и считает, сколько самокатов должно быть на парковке в начале блока, чтобы покрыть пиковый спрос. Если из парковки за утро уехало больше, чем приехало, это и есть дефицит, из которого строится capacity.</span>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>1. Что нужно загрузить</h3>
+                    <ol>
+                      <li><strong>Аренды XLSX/CSV</strong>: файл с поездками. Сайт берет город, время старта, парковку старта, парковку финиша, длительность/время финиша и координаты, если они есть.</li>
+                      <li><strong>All parkings</strong>: каталог парковок GoJet по выбранному городу. Отсюда берутся точные <strong>parking_id</strong>, название и координаты.</li>
+                      <li><strong>Monitor parkings / GoJet JSON</strong>: текущие правила монитора. Отсюда берутся <strong>schedule_id</strong> и уже существующие строки monitor.</li>
+                    </ol>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>2. Какие аренды попадают в расчет</h3>
+                    <ul>
+                      <li>Берется только выбранный город в поле <strong>Cidade</strong>.</li>
+                      <li>Берется период из настройки <strong>История</strong>: последние N дней от самой свежей аренды в файле.</li>
+                      <li>Старт аренды считается как спрос на самокат: <strong>dep +1</strong> в час старта на парковке старта.</li>
+                      <li>Финиш аренды считается как возврат самоката: <strong>arr +1</strong> в час финиша на парковке финиша.</li>
+                      <li>Если точного времени финиша нет, сайт берет старт + длительность аренды.</li>
+                    </ul>
+                  </div>
+
+                  <div class="manual-section manual-rules">
+                    <h3>3. Блоки времени</h3>
+                    <div class="manual-rule-grid">
+                      <div><strong>Будни</strong><span>Понедельник-четверг</span><b>Утро 00:00-11:59<br>Вечер 12:00-23:59</b></div>
+                      <div><strong>Пятница</strong><span>Отдельный день</span><b>День 00:00-11:59<br>Вечер 12:00-23:59</b></div>
+                      <div><strong>Выходные</strong><span>Суббота и воскресенье</span><b>Один общий блок<br>00:00-23:59</b></div>
+                    </div>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>4. Формула capacity</h3>
+                    <p>Для каждой парковки и каждого дня сайт строит часы блока и идет по ним сверху вниз:</p>
+                    <div class="formula-box">
+                      <code>накопленный дефицит += старты - финиши</code>
+                      <code>пик дня = максимум накопленного дефицита</code>
+                      <code>capacity блока = ceil(средний пик по дням)</code>
+                    </div>
+                    <p>Потом применяется минимум: если расчет дал <strong>2 или 3</strong>, сайт ставит <strong>4</strong>. Если расчет меньше <strong>2</strong>, парковка не попадает в новый monitor.</p>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>5. Пример расчета</h3>
+                    <p>Парковка утром: к 08:00 уехало 3, приехал 1, к 09:00 уехало еще 4, приехало 0. Накопленный дефицит: 2, потом 6. Пик утра = 6. Если по нескольким будним дням пики были 6, 5, 4, то средний пик = 5, capacity утра = 5.</p>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>6. Как выбираются парковки для monitor</h3>
+                    <ul>
+                      <li>Сайт сортирует парковки по самому большому capacity: сначала самые важные.</li>
+                      <li>Фильтр <strong>Qtd. no monitor</strong> ограничивает выдачу: все, Top 50, Top 100, Top 300 и так далее.</li>
+                      <li>В monitor попадают только строки с capacity <strong>4+</strong>.</li>
+                      <li>Если парковка уже есть в monitor, сайт обновляет capacity. Если нет, сайт добавляет новую строку.</li>
+                    </ul>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>7. Как сайт собирает новый monitor CSV</h3>
+                    <ol>
+                      <li>Создает строки для блоков: <strong>weekday-morning</strong>, <strong>weekday-evening</strong>, <strong>weekday-morning-friday</strong>, <strong>weekday-evening-friday</strong>, <strong>weekend</strong>.</li>
+                      <li>Находит парковку по <strong>parking_id</strong>. Если ID нет, пробует координаты и похожее название.</li>
+                      <li>Подставляет <strong>schedule_id</strong> из текущего monitor или из стандартных ID расписаний.</li>
+                      <li>Подставляет <strong>parking_id</strong>, <strong>parking_name</strong>, <strong>parking_latitude</strong>, <strong>parking_longitude</strong>.</li>
+                      <li>Строки без <strong>parking_id</strong> или координат не выгружаются, потому что GoJet не сможет нормально принять такой monitor.</li>
+                    </ol>
+                  </div>
+
+                  <div class="manual-section manual-checklist">
+                    <h3>8. Как пользоваться по шагам</h3>
+                    <ol>
+                      <li>Выбери город в <strong>Cidade</strong>.</li>
+                      <li>Нажми <strong>Загрузить аренды</strong> и выбери файл аренд.</li>
+                      <li>Нажми <strong>Собрать по арендам</strong>.</li>
+                      <li>Если сайт пишет, что нет parking_id, нажми <strong>All parkings</strong>.</li>
+                      <li>Если нет schedule_id, нажми <strong>Monitor parkings</strong> или импортируй полный <strong>GoJet JSON</strong>.</li>
+                      <li>Нажми <strong>Новый monitor CSV</strong> и проверь файл.</li>
+                    </ol>
+                  </div>
+
+                  <div class="manual-note">
+                    <strong>Финальный CSV должен содержать:</strong>
+                    <span>city_id, city_name, schedule_id, schedule_name, parking_id, parking_name, parking_latitude, parking_longitude, capacity. Если пустой parking_id или координаты, сначала нужен All parkings / GoJet JSON. Если пустой schedule_id, нужен Monitor parkings / GoJet JSON с parking_rules и schedule.</span>
+                  </div>
                 </div>
-                <p>Потом применяется минимум: если расчет дал <strong>2 или 3</strong>, сайт ставит <strong>4</strong>. Если расчет меньше <strong>2</strong>, парковка не попадает в новый monitor.</p>
-              </div>
 
-              <div class="manual-section">
-                <h3>5. Пример расчета</h3>
-                <p>Парковка утром: к 08:00 уехало 3, приехал 1, к 09:00 уехало еще 4, приехало 0. Накопленный дефицит: 2, потом 6. Пик утра = 6. Если по нескольким будним дням пики были 6, 5, 4, то средний пик = 5, capacity утра = 5.</p>
-              </div>
+                <div class="manual-copy manual-content-pt">
+                  <div class="manual-lead">
+                    <strong>Ideia principal:</strong>
+                    <span>o site nao olha apenas “quantos patinetes estao agora”. Ele usa o historico de alugueis para calcular quantos patinetes precisam estar no estacionamento no inicio de cada bloco para cobrir o pico de demanda. Se sairam mais patinetes do que chegaram, isso vira deficit e desse deficit sai o capacity.</span>
+                  </div>
 
-              <div class="manual-section">
-                <h3>6. Как выбираются парковки для monitor</h3>
-                <ul>
-                  <li>Сайт сортирует парковки по самому большому capacity: сначала самые важные.</li>
-                  <li>Фильтр <strong>Qtd. no monitor</strong> ограничивает выдачу: все, Top 50, Top 100, Top 300 и так далее.</li>
-                  <li>В monitor попадают только строки с capacity <strong>4+</strong>.</li>
-                  <li>Если парковка уже есть в monitor, сайт обновляет capacity. Если нет, сайт добавляет новую строку.</li>
-                </ul>
-              </div>
+                  <div class="manual-section">
+                    <h3>1. O que precisa carregar</h3>
+                    <ol>
+                      <li><strong>Alugueis XLSX/CSV</strong>: arquivo com viagens. O site usa cidade, hora de inicio, estacionamento de origem, estacionamento de destino, duracao/hora de fim e coordenadas quando existirem.</li>
+                      <li><strong>All parkings</strong>: catalogo GoJet da cidade selecionada. Daqui vem <strong>parking_id</strong>, nome correto e coordenadas.</li>
+                      <li><strong>Monitor parkings / GoJet JSON</strong>: regras atuais do monitor. Daqui vem <strong>schedule_id</strong> e as linhas ja existentes do monitor.</li>
+                    </ol>
+                  </div>
 
-              <div class="manual-section">
-                <h3>7. Как сайт собирает новый monitor CSV</h3>
-                <ol>
-                  <li>Создает строки для блоков: <strong>weekday-morning</strong>, <strong>weekday-evening</strong>, <strong>weekday-morning-friday</strong>, <strong>weekday-evening-friday</strong>, <strong>weekend</strong>.</li>
-                  <li>Находит парковку по <strong>parking_id</strong>. Если ID нет, пробует координаты и похожее название.</li>
-                  <li>Подставляет <strong>schedule_id</strong> из текущего monitor или из стандартных ID расписаний.</li>
-                  <li>Подставляет <strong>parking_id</strong>, <strong>parking_name</strong>, <strong>parking_latitude</strong>, <strong>parking_longitude</strong>.</li>
-                  <li>Строки без <strong>parking_id</strong> или координат не выгружаются, потому что GoJet не сможет нормально принять такой monitor.</li>
-                </ol>
-              </div>
+                  <div class="manual-section">
+                    <h3>2. Quais alugueis entram no calculo</h3>
+                    <ul>
+                      <li>Entra somente a cidade escolhida em <strong>Cidade</strong>.</li>
+                      <li>Entra o periodo da configuracao <strong>Historia</strong>: ultimos N dias a partir do aluguel mais recente do arquivo.</li>
+                      <li>Inicio do aluguel conta como demanda: <strong>dep +1</strong> na hora de saida do estacionamento de origem.</li>
+                      <li>Fim do aluguel conta como retorno: <strong>arr +1</strong> na hora de chegada ao estacionamento de destino.</li>
+                      <li>Se nao houver hora exata de fim, o site usa inicio + duracao do aluguel.</li>
+                    </ul>
+                  </div>
 
-              <div class="manual-section manual-checklist">
-                <h3>8. Как пользоваться по шагам</h3>
-                <ol>
-                  <li>Выбери город в <strong>Cidade</strong>.</li>
-                  <li>Нажми <strong>Загрузить аренды</strong> и выбери файл аренд.</li>
-                  <li>Нажми <strong>Собрать по арендам</strong>.</li>
-                  <li>Если сайт пишет, что нет parking_id, нажми <strong>All parkings</strong>.</li>
-                  <li>Если нет schedule_id, нажми <strong>Monitor parkings</strong> или импортируй полный <strong>GoJet JSON</strong>.</li>
-                  <li>Нажми <strong>Новый monitor CSV</strong> и проверь файл.</li>
-                </ol>
-              </div>
+                  <div class="manual-section manual-rules">
+                    <h3>3. Blocos de tempo</h3>
+                    <div class="manual-rule-grid">
+                      <div><strong>Dias uteis</strong><span>Segunda a quinta</span><b>Manha 00:00-11:59<br>Noite 12:00-23:59</b></div>
+                      <div><strong>Sexta-feira</strong><span>Dia separado</span><b>Dia 00:00-11:59<br>Noite 12:00-23:59</b></div>
+                      <div><strong>Fim de semana</strong><span>Sabado e domingo</span><b>Bloco unico<br>00:00-23:59</b></div>
+                    </div>
+                  </div>
 
-              <div class="manual-note">
-                <strong>Финальный CSV должен содержать:</strong>
-                <span>city_id, city_name, schedule_id, schedule_name, parking_id, parking_name, parking_latitude, parking_longitude, capacity. Если пустой parking_id или координаты, сначала нужен All parkings / GoJet JSON. Если пустой schedule_id, нужен Monitor parkings / GoJet JSON с parking_rules и schedule.</span>
+                  <div class="manual-section">
+                    <h3>4. Formula do capacity</h3>
+                    <p>Para cada estacionamento e cada dia, o site percorre as horas do bloco:</p>
+                    <div class="formula-box">
+                      <code>deficit acumulado += saidas - chegadas</code>
+                      <code>pico do dia = maior deficit acumulado</code>
+                      <code>capacity do bloco = ceil(media dos picos dos dias)</code>
+                    </div>
+                    <p>Depois entra o minimo: se o calculo deu <strong>2 ou 3</strong>, o site coloca <strong>4</strong>. Se deu menos de <strong>2</strong>, o estacionamento nao entra no novo monitor.</p>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>5. Exemplo de calculo</h3>
+                    <p>De manha em um estacionamento: ate 08:00 sairam 3 e chegou 1; ate 09:00 sairam mais 4 e chegou 0. O deficit acumulado fica 2 e depois 6. Pico da manha = 6. Se em varios dias uteis os picos foram 6, 5 e 4, a media e 5, entao capacity da manha = 5.</p>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>6. Como o site escolhe estacionamentos para o monitor</h3>
+                    <ul>
+                      <li>Ordena pelo maior capacity: primeiro os pontos mais importantes.</li>
+                      <li>O filtro <strong>Qtd. no monitor</strong> limita a saida: todos, Top 50, Top 100, Top 300 etc.</li>
+                      <li>So entram linhas com capacity <strong>4+</strong>.</li>
+                      <li>Se o estacionamento ja existe no monitor, o site atualiza o capacity. Se nao existe, adiciona nova linha.</li>
+                    </ul>
+                  </div>
+
+                  <div class="manual-section">
+                    <h3>7. Como o site monta o novo monitor CSV</h3>
+                    <ol>
+                      <li>Cria linhas para os blocos: <strong>weekday-morning</strong>, <strong>weekday-evening</strong>, <strong>weekday-morning-friday</strong>, <strong>weekday-evening-friday</strong>, <strong>weekend</strong>.</li>
+                      <li>Procura o estacionamento por <strong>parking_id</strong>. Se nao tiver ID, tenta coordenadas e nome parecido.</li>
+                      <li>Preenche <strong>schedule_id</strong> pelo monitor atual ou pelos IDs padrao de agenda.</li>
+                      <li>Preenche <strong>parking_id</strong>, <strong>parking_name</strong>, <strong>parking_latitude</strong> e <strong>parking_longitude</strong>.</li>
+                      <li>Linhas sem <strong>parking_id</strong> ou coordenadas nao sao exportadas, porque o GoJet pode nao aceitar esse monitor corretamente.</li>
+                    </ol>
+                  </div>
+
+                  <div class="manual-section manual-checklist">
+                    <h3>8. Passo a passo</h3>
+                    <ol>
+                      <li>Escolha a cidade em <strong>Cidade</strong>.</li>
+                      <li>Clique em <strong>Загрузить аренды</strong> e selecione o arquivo de alugueis.</li>
+                      <li>Clique em <strong>Собрать по арендам</strong>.</li>
+                      <li>Se faltar parking_id, clique em <strong>All parkings</strong>.</li>
+                      <li>Se faltar schedule_id, clique em <strong>Monitor parkings</strong> ou importe o <strong>GoJet JSON</strong> completo.</li>
+                      <li>Clique em <strong>Новый monitor CSV</strong> e confira o arquivo.</li>
+                    </ol>
+                  </div>
+
+                  <div class="manual-note">
+                    <strong>O CSV final deve conter:</strong>
+                    <span>city_id, city_name, schedule_id, schedule_name, parking_id, parking_name, parking_latitude, parking_longitude, capacity. Se parking_id ou coordenadas estiverem vazios, carregue All parkings / GoJet JSON. Se schedule_id estiver vazio, carregue Monitor parkings / GoJet JSON com parking_rules e schedule.</span>
+                  </div>
+                </div>
               </div>
             </details>
             <div class="capacity-citybar">

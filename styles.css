@@ -2093,8 +2093,8 @@ button:disabled,
 }
 
 .manual-panel summary::after {
-  content: "Показать";
-  min-width: 98px;
+  content: "Показать / Abrir";
+  min-width: 142px;
   padding: 8px 12px;
   border: 1px solid rgba(34, 243, 189, .28);
   border-radius: 999px;
@@ -2106,7 +2106,7 @@ button:disabled,
 }
 
 .manual-panel[open] summary::after {
-  content: "Скрыть";
+  content: "Скрыть / Fechar";
   color: #dff7ff;
   background: rgba(8, 25, 34, .92);
 }
@@ -2125,5 +2125,66 @@ button:disabled,
   }
   .manual-panel summary::after {
     width: 100%;
+  }
+}
+/* Manual language switch */
+.manual-language-switch {
+  padding-bottom: 2px;
+}
+
+.manual-language-switch > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.manual-language-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin: 0 14px 12px;
+  padding: 5px;
+  border: 1px solid rgba(130, 231, 222, .18);
+  border-radius: 999px;
+  background: rgba(3, 13, 19, .72);
+}
+
+.manual-language-tabs label {
+  min-width: 104px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #cfe6ee;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+#manualLangRu:checked ~ .manual-language-tabs label[for="manualLangRu"],
+#manualLangPt:checked ~ .manual-language-tabs label[for="manualLangPt"] {
+  color: #071119;
+  background: linear-gradient(135deg, #22f3bd, #2db7ff);
+}
+
+.manual-content-pt {
+  display: none;
+}
+
+#manualLangPt:checked ~ .manual-content-ru {
+  display: none;
+}
+
+#manualLangPt:checked ~ .manual-content-pt {
+  display: block;
+}
+
+@media (max-width: 760px) {
+  .manual-language-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: calc(100% - 28px);
+  }
+  .manual-language-tabs label {
+    min-width: 0;
   }
 }
