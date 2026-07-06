@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JET Capacity Brain</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260705-7">
+    <link rel="stylesheet" href="./styles.css?v=20260705-8">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./app.js?v=20260705-21" defer></script>
+    <script src="./app.js?v=20260705-22" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -191,48 +191,97 @@
             <details class="manual-panel" open>
               <summary>
                 <span>Мануал</span>
-                <strong>Как пользоваться и как сайт считает capacity</strong>
+                <strong>Что делает сайт и по каким правилам считает capacity</strong>
               </summary>
-              <div class="manual-grid">
-                <div>
-                  <h3>1. Выбери город</h3>
-                  <p>В поле <strong>Cidade</strong> выбери нужный город. Если город новый, сайт старается понять его по файлу аренды и по <strong>city_id</strong>. Для Curitiba правильный city_id: <strong>655636e16e2c3042b5abbc9e</strong>.</p>
-                </div>
-                <div>
-                  <h3>2. Загрузи аренды</h3>
-                  <p>Нажми <strong>Загрузить аренды</strong> и выбери XLSX/CSV с арендами. Потом нажми <strong>Собрать по арендам</strong>. Сайт сам разделит данные на будни, пятницу и выходные.</p>
-                </div>
-                <div>
-                  <h3>3. Подтяни парковки</h3>
-                  <p>Нажми <strong>All parkings</strong>, чтобы загрузить все парковки города с <strong>parking_id</strong> и координатами. Это нужно, чтобы в финальном CSV не было пустых ID и latitude/longitude.</p>
-                </div>
-                <div>
-                  <h3>4. Подтяни монитор</h3>
-                  <p>Нажми <strong>Monitor parkings</strong>. Если GoJet или Apps Script не отдает данные, открой <strong>map.gojet.app</strong>, скопируй скрипт <a href="./capture_gojet_parkings.js" target="_blank" rel="noopener">capture_gojet_parkings.js</a>, вставь его в Console и загрузи полученный <strong>gojet_capacity_city_id.json</strong> через <strong>Importar GoJet JSON</strong>.</p>
-                </div>
-                <div>
-                  <h3>5. Как считается capacity</h3>
-                  <p>Для каждой парковки сайт считает старты и финиши по часам. Capacity = средний пиковый дефицит: максимум, где стартов накопилось больше, чем финишей. Блок <strong>утро</strong> считает часы 00:00-11:59, <strong>вечер</strong> считает 12:00-23:59.</p>
-                </div>
-                <div>
-                  <h3>6. Правила блоков</h3>
-                  <p>Понедельник-четверг идут в будни: утро и вечер. Пятница идет отдельно: день и вечер. Суббота и воскресенье идут в отдельный блок выходных. Capacity 2 или 3 автоматически повышается до 4, меньше 2 не попадает в monitor.</p>
-                </div>
-                <div>
-                  <h3>7. Как собирается monitor CSV</h3>
-                  <p>Сайт берет рассчитанные capacity, сопоставляет парковки по <strong>parking_id</strong>, координатам и похожему названию, обновляет существующие строки monitor и добавляет новые парковки, которых нет в monitor.</p>
-                </div>
-                <div>
-                  <h3>8. Финальная проверка</h3>
-                  <p>Нажми <strong>Новый monitor CSV</strong>. В готовом файле должны быть колонки <strong>city_id</strong>, <strong>city_name</strong>, <strong>schedule_id</strong>, <strong>schedule_name</strong>, <strong>parking_id</strong>, <strong>parking_name</strong>, <strong>parking_latitude</strong>, <strong>parking_longitude</strong>, <strong>capacity</strong>.</p>
+
+              <div class="manual-lead">
+                <strong>Главная идея:</strong>
+                <span>сайт не смотрит “сколько самокатов стоит сейчас”. Он берет историю аренд и считает, сколько самокатов должно быть на парковке в начале блока, чтобы покрыть пиковый спрос. Если из парковки за утро уехало больше, чем приехало, это и есть дефицит, из которого строится capacity.</span>
+              </div>
+
+              <div class="manual-section">
+                <h3>1. Что нужно загрузить</h3>
+                <ol>
+                  <li><strong>Аренды XLSX/CSV</strong>: файл с поездками. Сайт берет город, время старта, парковку старта, парковку финиша, длительность/время финиша и координаты, если они есть.</li>
+                  <li><strong>All parkings</strong>: каталог парковок GoJet по выбранному городу. Отсюда берутся точные <strong>parking_id</strong>, название и координаты.</li>
+                  <li><strong>Monitor parkings / GoJet JSON</strong>: текущие правила монитора. Отсюда берутся <strong>schedule_id</strong> и уже существующие строки monitor.</li>
+                </ol>
+              </div>
+
+              <div class="manual-section">
+                <h3>2. Какие аренды попадают в расчет</h3>
+                <ul>
+                  <li>Берется только выбранный город в поле <strong>Cidade</strong>.</li>
+                  <li>Берется период из настройки <strong>История</strong>: последние N дней от самой свежей аренды в файле.</li>
+                  <li>Старт аренды считается как спрос на самокат: <strong>dep +1</strong> в час старта на парковке старта.</li>
+                  <li>Финиш аренды считается как возврат самоката: <strong>arr +1</strong> в час финиша на парковке финиша.</li>
+                  <li>Если точного времени финиша нет, сайт берет старт + длительность аренды.</li>
+                </ul>
+              </div>
+
+              <div class="manual-section manual-rules">
+                <h3>3. Блоки времени</h3>
+                <div class="manual-rule-grid">
+                  <div><strong>Будни</strong><span>Понедельник-четверг</span><b>Утро 00:00-11:59<br>Вечер 12:00-23:59</b></div>
+                  <div><strong>Пятница</strong><span>Отдельный день</span><b>День 00:00-11:59<br>Вечер 12:00-23:59</b></div>
+                  <div><strong>Выходные</strong><span>Суббота и воскресенье</span><b>Один общий блок<br>00:00-23:59</b></div>
                 </div>
               </div>
+
+              <div class="manual-section">
+                <h3>4. Формула capacity</h3>
+                <p>Для каждой парковки и каждого дня сайт строит часы блока и идет по ним сверху вниз:</p>
+                <div class="formula-box">
+                  <code>накопленный дефицит += старты - финиши</code>
+                  <code>пик дня = максимум накопленного дефицита</code>
+                  <code>capacity блока = ceil(средний пик по дням)</code>
+                </div>
+                <p>Потом применяется минимум: если расчет дал <strong>2 или 3</strong>, сайт ставит <strong>4</strong>. Если расчет меньше <strong>2</strong>, парковка не попадает в новый monitor.</p>
+              </div>
+
+              <div class="manual-section">
+                <h3>5. Пример расчета</h3>
+                <p>Парковка утром: к 08:00 уехало 3, приехал 1, к 09:00 уехало еще 4, приехало 0. Накопленный дефицит: 2, потом 6. Пик утра = 6. Если по нескольким будним дням пики были 6, 5, 4, то средний пик = 5, capacity утра = 5.</p>
+              </div>
+
+              <div class="manual-section">
+                <h3>6. Как выбираются парковки для monitor</h3>
+                <ul>
+                  <li>Сайт сортирует парковки по самому большому capacity: сначала самые важные.</li>
+                  <li>Фильтр <strong>Qtd. no monitor</strong> ограничивает выдачу: все, Top 50, Top 100, Top 300 и так далее.</li>
+                  <li>В monitor попадают только строки с capacity <strong>4+</strong>.</li>
+                  <li>Если парковка уже есть в monitor, сайт обновляет capacity. Если нет, сайт добавляет новую строку.</li>
+                </ul>
+              </div>
+
+              <div class="manual-section">
+                <h3>7. Как сайт собирает новый monitor CSV</h3>
+                <ol>
+                  <li>Создает строки для блоков: <strong>weekday-morning</strong>, <strong>weekday-evening</strong>, <strong>weekday-morning-friday</strong>, <strong>weekday-evening-friday</strong>, <strong>weekend</strong>.</li>
+                  <li>Находит парковку по <strong>parking_id</strong>. Если ID нет, пробует координаты и похожее название.</li>
+                  <li>Подставляет <strong>schedule_id</strong> из текущего monitor или из стандартных ID расписаний.</li>
+                  <li>Подставляет <strong>parking_id</strong>, <strong>parking_name</strong>, <strong>parking_latitude</strong>, <strong>parking_longitude</strong>.</li>
+                  <li>Строки без <strong>parking_id</strong> или координат не выгружаются, потому что GoJet не сможет нормально принять такой monitor.</li>
+                </ol>
+              </div>
+
+              <div class="manual-section manual-checklist">
+                <h3>8. Как пользоваться по шагам</h3>
+                <ol>
+                  <li>Выбери город в <strong>Cidade</strong>.</li>
+                  <li>Нажми <strong>Загрузить аренды</strong> и выбери файл аренд.</li>
+                  <li>Нажми <strong>Собрать по арендам</strong>.</li>
+                  <li>Если сайт пишет, что нет parking_id, нажми <strong>All parkings</strong>.</li>
+                  <li>Если нет schedule_id, нажми <strong>Monitor parkings</strong> или импортируй полный <strong>GoJet JSON</strong>.</li>
+                  <li>Нажми <strong>Новый monitor CSV</strong> и проверь файл.</li>
+                </ol>
+              </div>
+
               <div class="manual-note">
-                <strong>Важно:</strong>
-                <span>Если в CSV пустой parking_id или координаты, сначала нажми All parkings или импортируй GoJet JSON. Если пустой schedule_id, нужен Monitor parkings или полный GoJet JSON с parking_rules/schedule.</span>
+                <strong>Финальный CSV должен содержать:</strong>
+                <span>city_id, city_name, schedule_id, schedule_name, parking_id, parking_name, parking_latitude, parking_longitude, capacity. Если пустой parking_id или координаты, сначала нужен All parkings / GoJet JSON. Если пустой schedule_id, нужен Monitor parkings / GoJet JSON с parking_rules и schedule.</span>
               </div>
             </details>
-
             <div class="capacity-citybar">
               <label>
                 <span>Cidade</span>
