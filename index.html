@@ -1,530 +1,153 @@
 <!doctype html>
-<html lang="ru">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>JET Capacity Brain</title>
-    <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260705-11">
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./app.js?v=20260705-23" defer></script>
-    <script src="./i18n.js?v=20260706-4" defer></script>
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div>
-          <div class="eyebrow">JET Ops / Belo Horizonte</div>
-          <h1>JET Capacity Brain</h1>
-        </div>
-        <div class="top-actions">
-          <div class="site-language-switch" aria-label="Site language">
-            <button id="siteLangRu" class="active" type="button" data-site-lang="ru" aria-pressed="true">RU</button>
-            <button id="siteLangPt" type="button" data-site-lang="pt" aria-pressed="false">PT</button>
-          </div>
-          <div class="status-pill" id="statusPill">
-            <span class="status-dot"></span>
-            <span id="statusText">История не загружена</span>
-          </div>
-          <button class="icon-button" id="refreshBtn" type="button" title="Пересчитать">
-            <i data-lucide="refresh-cw"></i>
-          </button>
-        </div>
-      </header>
-
-      <main class="layout">
-        <aside class="control-panel">
-          <section class="upload-panel" id="dropZone">
-            <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" multiple hidden>
-            <button class="primary-action" id="uploadBtn" type="button">
-              <i data-lucide="upload"></i>
-              <span>Загрузить аренды</span>
-            </button>
-            <div class="upload-meta">
-              <strong>All cities / auto city</strong>
-              <span id="lastUploadText">Файлы еще не добавлены</span>
-            </div>
-          </section>
-
-          <section class="settings-panel">
-            <div class="section-head">
-              <h2>Настройки расчета</h2>
-            </div>
-
-            <label class="range-row">
-              <span>История</span>
-              <strong><span id="lookbackValue">21</span> дн.</strong>
-              <input id="lookbackDays" type="range" min="3" max="60" step="1" value="21">
-            </label>
-
-            <label class="range-row legacy-brain-control">
-              <span>Заранее</span>
-              <strong><span id="leadValue">45</span> мин.</strong>
-              <input id="leadMinutes" type="range" min="15" max="180" step="15" value="45">
-            </label>
-
-            <label class="range-row legacy-brain-control">
-              <span>Мин. аренды</span>
-              <strong><span id="minRidesValue">3</span></strong>
-              <input id="minRides" type="range" min="1" max="25" step="1" value="3">
-            </label>
-
-            <label class="range-row legacy-brain-control">
-              <span>Топ</span>
-              <strong><span id="topLimitValue">24</span></strong>
-              <input id="topLimit" type="range" min="8" max="60" step="1" value="24">
-            </label>
-          </section>
-
-          <section class="tools-panel">
-            <button id="exportHistoryBtn" type="button">
-              <i data-lucide="download"></i>
-              <span>Экспорт истории</span>
-            </button>
-            <button id="importHistoryBtn" type="button">
-              <i data-lucide="file-json"></i>
-              <span>Импорт истории</span>
-            </button>
-            <input id="historyInput" type="file" accept=".json" hidden>
-            <button id="exportCsvBtn" type="button">
-              <i data-lucide="sheet"></i>
-              <span>CSV план</span>
-            </button>
-            <button id="clearBtn" class="danger" type="button">
-              <i data-lucide="trash-2"></i>
-              <span>Очистить</span>
-            </button>
-          </section>
-
-          <section class="history-panel">
-            <div class="section-head">
-              <h2>Загрузки</h2>
-              <span id="uploadCount">0</span>
-            </div>
-            <div class="upload-list" id="uploadList"></div>
-          </section>
-        </aside>
-
-        <section class="workspace">
-          <div class="kpi-grid legacy-brain" id="kpiGrid">
-            <div class="kpi">
-              <span>Аренды BH</span>
-              <strong id="kpiRides">0</strong>
-            </div>
-            <div class="kpi">
-              <span>Парковки</span>
-              <strong id="kpiParkings">0</strong>
-            </div>
-            <div class="kpi">
-              <span>Дней</span>
-              <strong id="kpiDays">0</strong>
-            </div>
-            <div class="kpi accent">
-              <span>Уверенность</span>
-              <strong id="kpiConfidence">0%</strong>
-            </div>
-          </div>
-
-          <section class="panel plan-panel legacy-brain">
-            <div class="panel-head">
-              <div>
-                <h2>Следующие пополнения</h2>
-                <span id="planSubtext">Нет данных для расчета</span>
-              </div>
-              <div class="segmented">
-                <button class="segment active" data-plan-mode="now" type="button">Сейчас</button>
-                <button class="segment" data-plan-mode="day" type="button">День</button>
-              </div>
-            </div>
-            <div class="plan-list" id="planList"></div>
-          </section>
-
-
-          <section class="panel capacity-panel" id="capacityPanel">
-            <div class="panel-head">
-              <div>
-                <h2>Capacity Monitor</h2>
-                <span id="capacityStatusText">&#1047;&#1072;&#1075;&#1088;&#1091;&#1079;&#1080; capacity CSV &#1076;&#1083;&#1103; &#1089;&#1088;&#1072;&#1074;&#1085;&#1077;&#1085;&#1080;&#1103; &#1089; &#1084;&#1086;&#1085;&#1080;&#1090;&#1086;&#1088;&#1086;&#1084;</span>
-              </div>
-              <div class="panel-actions">
-                <button id="capacityUploadBtn" type="button">
-                  <i data-lucide="upload"></i>
-                  <span>Capacity CSV</span>
-                </button>
-                <input id="capacityInput" type="file" accept=".csv" hidden>
-                <button id="monitorCapacityBtn" type="button">
-                  <i data-lucide="database"></i>
-                  <span>Monitor CSV</span>
-                </button>
-                <input id="monitorCapacityInput" type="file" accept=".csv" hidden>
-                <button id="weekendCapacityBtn" type="button">
-                  <i data-lucide="calendar-days"></i>
-                  <span>Weekend CSV</span>
-                </button>
-                <input id="weekendCapacityInput" type="file" accept=".csv" hidden>
-                <button id="capacityExportBtn" type="button">
-                  <i data-lucide="file-down"></i>
-                  <span>CSV &#1086;&#1090;&#1095;&#1077;&#1090;</span>
-                </button>
-                <button id="monitorUpdateExportBtn" type="button" class="primary-lite">
-                  <i data-lucide="download"></i>
-                  <span>&#1053;&#1086;&#1074;&#1099;&#1081; monitor CSV</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="auto-flow-panel">
-              <div class="auto-flow-copy">
-                <span class="jet-pill">JET SCOOTER OPS</span>
-                <h3>&#1054;&#1076;&#1080;&#1085; &#1087;&#1086;&#1090;&#1086;&#1082;: &#1072;&#1088;&#1077;&#1085;&#1076;&#1099; -> capacity -> monitor CSV</h3>
-                <p>&#1047;&#1072;&#1075;&#1088;&#1091;&#1079;&#1080; &#1077;&#1078;&#1077;&#1076;&#1085;&#1077;&#1074;&#1085;&#1099;&#1077; &#1072;&#1088;&#1077;&#1085;&#1076;&#1099;. &#1057;&#1072;&#1081;&#1090; &#1089;&#1072;&#1084; &#1088;&#1072;&#1079;&#1076;&#1077;&#1083;&#1080;&#1090; &#1073;&#1091;&#1076;&#1085;&#1080;, &#1087;&#1103;&#1090;&#1085;&#1080;&#1094;&#1091; &#1080; &#1074;&#1099;&#1093;&#1086;&#1076;&#1085;&#1099;&#1077;, &#1089;&#1088;&#1072;&#1074;&#1085;&#1080;&#1090; &#1090;&#1077;&#1082;&#1091;&#1097;&#1080;&#1081; monitor &#1080; &#1089;&#1086;&#1073;&#1077;&#1088;&#1077;&#1090; &#1075;&#1086;&#1090;&#1086;&#1074;&#1099;&#1081; &#1092;&#1072;&#1081;&#1083;.</p>
-              </div>
-              <div class="auto-flow-steps">
-                <div><strong>1</strong><span>&#1040;&#1088;&#1077;&#1085;&#1076;&#1099; XLSX</span></div>
-                <div><strong>2</strong><span>&#1041;&#1091;&#1076;&#1085;&#1080; / &#1055;&#1090; / &#1042;&#1099;&#1093;&#1086;&#1076;&#1085;&#1099;&#1077;</span></div>
-                <div><strong>3</strong><span>Belo Horizonte.csv</span></div>
-              </div>
-              <button id="rentalAutoCapacityBtn" type="button" class="jet-run-btn">
-                <i data-lucide="zap"></i>
-                <span>&#1057;&#1086;&#1073;&#1088;&#1072;&#1090;&#1100; &#1087;&#1086; &#1072;&#1088;&#1077;&#1085;&#1076;&#1072;&#1084;</span>
-              </button>
-              <div id="autoCapacitySummary" class="auto-capacity-summary"></div>
-            </div>
-
-
-            <details class="manual-panel">
-              <summary>
-                <span>Мануал / Manual</span>
-                <strong>Правила расчета capacity / Regras de capacity</strong>
-              </summary>
-
-              <div class="manual-language-switch">
-                <input id="manualLangRu" name="manualLang" type="radio" checked>
-                <input id="manualLangPt" name="manualLang" type="radio">
-                <div class="manual-language-tabs" aria-label="Переключатель языка мануала">
-                  <label for="manualLangRu">Русский</label>
-                  <label for="manualLangPt">Português</label>
-                </div>
-
-                <div class="manual-copy manual-content-ru">
-                  <div class="manual-lead">
-                    <strong>Главная идея:</strong>
-                    <span>сайт не смотрит “сколько самокатов стоит сейчас”. Он берет историю аренд и считает, сколько самокатов должно быть на парковке в начале блока, чтобы покрыть пиковый спрос. Если из парковки за утро уехало больше, чем приехало, это и есть дефицит, из которого строится capacity.</span>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>1. Что нужно загрузить</h3>
-                    <ol>
-                      <li><strong>Аренды XLSX/CSV</strong>: файл с поездками. Сайт берет город, время старта, парковку старта, парковку финиша, длительность/время финиша и координаты, если они есть.</li>
-                      <li><strong>All parkings</strong>: каталог парковок GoJet по выбранному городу. Отсюда берутся точные <strong>parking_id</strong>, название и координаты.</li>
-                      <li><strong>Monitor parkings / GoJet JSON</strong>: текущие правила монитора. Отсюда берутся <strong>schedule_id</strong> и уже существующие строки monitor.</li>
-                    </ol>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>2. Какие аренды попадают в расчет</h3>
-                    <ul>
-                      <li>Берется только выбранный город в поле <strong>Cidade</strong>.</li>
-                      <li>Берется период из настройки <strong>История</strong>: последние N дней от самой свежей аренды в файле.</li>
-                      <li>Старт аренды считается как спрос на самокат: <strong>dep +1</strong> в час старта на парковке старта.</li>
-                      <li>Финиш аренды считается как возврат самоката: <strong>arr +1</strong> в час финиша на парковке финиша.</li>
-                      <li>Если точного времени финиша нет, сайт берет старт + длительность аренды.</li>
-                    </ul>
-                  </div>
-
-                  <div class="manual-section manual-rules">
-                    <h3>3. Блоки времени</h3>
-                    <div class="manual-rule-grid">
-                      <div><strong>Будни</strong><span>Понедельник-четверг</span><b>Утро 00:00-11:59<br>Вечер 12:00-23:59</b></div>
-                      <div><strong>Пятница</strong><span>Отдельный день</span><b>День 00:00-11:59<br>Вечер 12:00-23:59</b></div>
-                      <div><strong>Выходные</strong><span>Суббота и воскресенье</span><b>Один общий блок<br>00:00-23:59</b></div>
-                    </div>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>4. Формула capacity</h3>
-                    <p>Для каждой парковки и каждого дня сайт строит часы блока и идет по ним сверху вниз:</p>
-                    <div class="formula-box">
-                      <code>накопленный дефицит += старты - финиши</code>
-                      <code>пик дня = максимум накопленного дефицита</code>
-                      <code>capacity блока = ceil(средний пик по дням)</code>
-                    </div>
-                    <p>Потом применяется минимум: если расчет дал <strong>2 или 3</strong>, сайт ставит <strong>4</strong>. Если расчет меньше <strong>2</strong>, парковка не попадает в новый monitor.</p>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>5. Пример расчета</h3>
-                    <p>Парковка утром: к 08:00 уехало 3, приехал 1, к 09:00 уехало еще 4, приехало 0. Накопленный дефицит: 2, потом 6. Пик утра = 6. Если по нескольким будним дням пики были 6, 5, 4, то средний пик = 5, capacity утра = 5.</p>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>6. Как выбираются парковки для monitor</h3>
-                    <ul>
-                      <li>Сайт сортирует парковки по самому большому capacity: сначала самые важные.</li>
-                      <li>Фильтр <strong>Qtd. no monitor</strong> ограничивает выдачу: все, Top 50, Top 100, Top 300 и так далее.</li>
-                      <li>В monitor попадают только строки с capacity <strong>4+</strong>.</li>
-                      <li>Если парковка уже есть в monitor, сайт обновляет capacity. Если нет, сайт добавляет новую строку.</li>
-                    </ul>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>7. Как сайт собирает новый monitor CSV</h3>
-                    <ol>
-                      <li>Создает строки для блоков: <strong>weekday-morning</strong>, <strong>weekday-evening</strong>, <strong>weekday-morning-friday</strong>, <strong>weekday-evening-friday</strong>, <strong>weekend</strong>.</li>
-                      <li>Находит парковку по <strong>parking_id</strong>. Если ID нет, пробует координаты и похожее название.</li>
-                      <li>Подставляет <strong>schedule_id</strong> из текущего monitor или из стандартных ID расписаний.</li>
-                      <li>Подставляет <strong>parking_id</strong>, <strong>parking_name</strong>, <strong>parking_latitude</strong>, <strong>parking_longitude</strong>.</li>
-                      <li>Строки без <strong>parking_id</strong> или координат не выгружаются, потому что GoJet не сможет нормально принять такой monitor.</li>
-                    </ol>
-                  </div>
-
-                  <div class="manual-section manual-checklist">
-                    <h3>8. Как пользоваться по шагам</h3>
-                    <ol>
-                      <li>Выбери город в <strong>Cidade</strong>.</li>
-                      <li>Нажми <strong>Загрузить аренды</strong> и выбери файл аренд.</li>
-                      <li>Нажми <strong>Собрать по арендам</strong>.</li>
-                      <li>Если сайт пишет, что нет parking_id, нажми <strong>All parkings</strong>.</li>
-                      <li>Если нет schedule_id, нажми <strong>Monitor parkings</strong> или импортируй полный <strong>GoJet JSON</strong>.</li>
-                      <li>Нажми <strong>Новый monitor CSV</strong> и проверь файл.</li>
-                    </ol>
-                  </div>
-
-                  <div class="manual-note">
-                    <strong>Финальный CSV должен содержать:</strong>
-                    <span>city_id, city_name, schedule_id, schedule_name, parking_id, parking_name, parking_latitude, parking_longitude, capacity. Если пустой parking_id или координаты, сначала нужен All parkings / GoJet JSON. Если пустой schedule_id, нужен Monitor parkings / GoJet JSON с parking_rules и schedule.</span>
-                  </div>
-                </div>
-
-                <div class="manual-copy manual-content-pt">
-                  <div class="manual-lead">
-                    <strong>Ideia principal:</strong>
-                    <span>o site nao olha apenas “quantos patinetes estao agora”. Ele usa o historico de alugueis para calcular quantos patinetes precisam estar no estacionamento no inicio de cada bloco para cobrir o pico de demanda. Se sairam mais patinetes do que chegaram, isso vira deficit e desse deficit sai o capacity.</span>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>1. O que precisa carregar</h3>
-                    <ol>
-                      <li><strong>Alugueis XLSX/CSV</strong>: arquivo com viagens. O site usa cidade, hora de inicio, estacionamento de origem, estacionamento de destino, duracao/hora de fim e coordenadas quando existirem.</li>
-                      <li><strong>All parkings</strong>: catalogo GoJet da cidade selecionada. Daqui vem <strong>parking_id</strong>, nome correto e coordenadas.</li>
-                      <li><strong>Monitor parkings / GoJet JSON</strong>: regras atuais do monitor. Daqui vem <strong>schedule_id</strong> e as linhas ja existentes do monitor.</li>
-                    </ol>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>2. Quais alugueis entram no calculo</h3>
-                    <ul>
-                      <li>Entra somente a cidade escolhida em <strong>Cidade</strong>.</li>
-                      <li>Entra o periodo da configuracao <strong>Historia</strong>: ultimos N dias a partir do aluguel mais recente do arquivo.</li>
-                      <li>Inicio do aluguel conta como demanda: <strong>dep +1</strong> na hora de saida do estacionamento de origem.</li>
-                      <li>Fim do aluguel conta como retorno: <strong>arr +1</strong> na hora de chegada ao estacionamento de destino.</li>
-                      <li>Se nao houver hora exata de fim, o site usa inicio + duracao do aluguel.</li>
-                    </ul>
-                  </div>
-
-                  <div class="manual-section manual-rules">
-                    <h3>3. Blocos de tempo</h3>
-                    <div class="manual-rule-grid">
-                      <div><strong>Dias uteis</strong><span>Segunda a quinta</span><b>Manha 00:00-11:59<br>Noite 12:00-23:59</b></div>
-                      <div><strong>Sexta-feira</strong><span>Dia separado</span><b>Dia 00:00-11:59<br>Noite 12:00-23:59</b></div>
-                      <div><strong>Fim de semana</strong><span>Sabado e domingo</span><b>Bloco unico<br>00:00-23:59</b></div>
-                    </div>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>4. Formula do capacity</h3>
-                    <p>Para cada estacionamento e cada dia, o site percorre as horas do bloco:</p>
-                    <div class="formula-box">
-                      <code>deficit acumulado += saidas - chegadas</code>
-                      <code>pico do dia = maior deficit acumulado</code>
-                      <code>capacity do bloco = ceil(media dos picos dos dias)</code>
-                    </div>
-                    <p>Depois entra o minimo: se o calculo deu <strong>2 ou 3</strong>, o site coloca <strong>4</strong>. Se deu menos de <strong>2</strong>, o estacionamento nao entra no novo monitor.</p>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>5. Exemplo de calculo</h3>
-                    <p>De manha em um estacionamento: ate 08:00 sairam 3 e chegou 1; ate 09:00 sairam mais 4 e chegou 0. O deficit acumulado fica 2 e depois 6. Pico da manha = 6. Se em varios dias uteis os picos foram 6, 5 e 4, a media e 5, entao capacity da manha = 5.</p>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>6. Como o site escolhe estacionamentos para o monitor</h3>
-                    <ul>
-                      <li>Ordena pelo maior capacity: primeiro os pontos mais importantes.</li>
-                      <li>O filtro <strong>Qtd. no monitor</strong> limita a saida: todos, Top 50, Top 100, Top 300 etc.</li>
-                      <li>So entram linhas com capacity <strong>4+</strong>.</li>
-                      <li>Se o estacionamento ja existe no monitor, o site atualiza o capacity. Se nao existe, adiciona nova linha.</li>
-                    </ul>
-                  </div>
-
-                  <div class="manual-section">
-                    <h3>7. Como o site monta o novo monitor CSV</h3>
-                    <ol>
-                      <li>Cria linhas para os blocos: <strong>weekday-morning</strong>, <strong>weekday-evening</strong>, <strong>weekday-morning-friday</strong>, <strong>weekday-evening-friday</strong>, <strong>weekend</strong>.</li>
-                      <li>Procura o estacionamento por <strong>parking_id</strong>. Se nao tiver ID, tenta coordenadas e nome parecido.</li>
-                      <li>Preenche <strong>schedule_id</strong> pelo monitor atual ou pelos IDs padrao de agenda.</li>
-                      <li>Preenche <strong>parking_id</strong>, <strong>parking_name</strong>, <strong>parking_latitude</strong> e <strong>parking_longitude</strong>.</li>
-                      <li>Linhas sem <strong>parking_id</strong> ou coordenadas nao sao exportadas, porque o GoJet pode nao aceitar esse monitor corretamente.</li>
-                    </ol>
-                  </div>
-
-                  <div class="manual-section manual-checklist">
-                    <h3>8. Passo a passo</h3>
-                    <ol>
-                      <li>Escolha a cidade em <strong>Cidade</strong>.</li>
-                      <li>Clique em <strong>Carregar alugueis</strong> e selecione o arquivo de alugueis.</li>
-                      <li>Clique em <strong>Montar pelos alugueis</strong>.</li>
-                      <li>Se faltar parking_id, clique em <strong>All parkings</strong>.</li>
-                      <li>Se faltar schedule_id, clique em <strong>Monitor parkings</strong> ou importe o <strong>GoJet JSON</strong> completo.</li>
-                      <li>Clique em <strong>Novo monitor CSV</strong> e confira o arquivo.</li>
-                    </ol>
-                  </div>
-
-                  <div class="manual-note">
-                    <strong>O CSV final deve conter:</strong>
-                    <span>city_id, city_name, schedule_id, schedule_name, parking_id, parking_name, parking_latitude, parking_longitude, capacity. Se parking_id ou coordenadas estiverem vazios, carregue All parkings / GoJet JSON. Se schedule_id estiver vazio, carregue Monitor parkings / GoJet JSON com parking_rules e schedule.</span>
-                  </div>
-                </div>
-              </div>
-            </details>
-            <div class="capacity-citybar">
-              <label>
-                <span>Cidade</span>
-                <select id="capacityCitySelect"></select>
-              </label>
-              <label class="city-id-field">
-                <span>city_id</span>
-                <input id="capacityCityId" type="text" placeholder="cole city_id aqui">
-              </label>
-              <label>
-                <span>Qtd. no monitor</span>
-                <select id="monitorParkingLimit">
-                  <option value="all">Todas</option>
-                  <option value="50">Top 50</option>
-                  <option value="100">Top 100</option>
-                  <option value="150">Top 150</option>
-                  <option value="200">Top 200</option>
-                  <option value="250">Top 250</option>
-                  <option value="300">Top 300</option>
-                </select>
-              </label>
-              <button id="allParkingsBtn" type="button">
-                <i data-lucide="map-pinned"></i>
-                <span>All parkings</span>
-              </button>
-              <button id="monitorRulesBtn" type="button">
-                <i data-lucide="list-checks"></i>
-                <span>Monitor parkings</span>
-              </button>
-              <button id="gojetParkingsBtn" type="button" title="Importar JSON GoJet capturado no navegador: parkings + rules + schedule_id">
-                <i data-lucide="upload"></i>
-                <span>Importar GoJet JSON</span>
-              </button>
-              <input id="gojetParkingsInput" type="file" accept=".json,application/json" hidden>
-            </div>
-            <div class="apps-bridge">
-              <label>
-                <span>Apps Script user</span>
-                <input id="appsScriptUser" type="text" placeholder="usuario">
-              </label>
-              <label>
-                <span>Apps Script pass</span>
-                <input id="appsScriptPass" type="password" placeholder="senha">
-              </label>
-              <button id="appsScriptLoginBtn" type="button">
-                <i data-lucide="key-round"></i>
-                <span>Conectar Apps Script</span>
-              </button>
-              <span id="appsScriptStatus" class="bridge-status">offline</span>
-            </div>
-            <div class="capacity-kpis">
-              <div><strong id="capacityKpiSource">0</strong><span>capacity 2+ / min 4</span></div>
-              <div><strong id="capacityKpiMatched">0</strong><span>&#1085;&#1072;&#1081;&#1076;&#1077;&#1085;&#1086;</span></div>
-              <div><strong id="capacityKpiMissing">0</strong><span>&#1085;&#1077;&#1090; &#1074; monitor</span></div>
-              <div><strong id="capacityKpiProblems">0</strong><span>&#1087;&#1088;&#1072;&#1074;&#1082;&#1080; capacity</span></div>
-              <div><strong id="capacityKpiGenerated">0</strong><span>&#1089;&#1090;&#1088;&#1086;&#1082; &#1074; &#1085;&#1086;&#1074;&#1086;&#1084; CSV</span></div>
-            </div>
-            <div class="capacity-grid">
-              <div>
-                <h3>&#1053;&#1091;&#1078;&#1085;&#1086; &#1076;&#1086;&#1073;&#1072;&#1074;&#1080;&#1090;&#1100; &#1074; monitor</h3>
-                <div id="monitorSuggestionList" class="compact-list"></div>
-              </div>
-              <div>
-                <h3>&#1053;&#1077;&#1090; &#1074; monitor / &#1087;&#1088;&#1086;&#1074;&#1077;&#1088;&#1080;&#1090;&#1100; &#1080;&#1084;&#1103;</h3>
-                <div id="capacityMissingList" class="compact-list"></div>
-              </div>
-              <div>
-                <h3>Capacity &#1087;&#1086; &#1073;&#1091;&#1076;&#1085;&#1103;&#1084;</h3>
-                <div class="table-wrap compact-table-wrap">
-                  <table class="capacity-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>&#1055;&#1072;&#1088;&#1082;&#1086;&#1074;&#1082;&#1072;</th>
-                        <th>&#1059;&#1090;&#1088;&#1086;</th>
-                        <th>&#1042;&#1077;&#1095;&#1077;&#1088;</th>
-                      </tr>
-                    </thead>
-                    <tbody id="capacityMismatchTable"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </section>
-          <section class="content-grid legacy-brain">
-            <div class="panel top-panel">
-              <div class="panel-head">
-                <div>
-                  <h2>Топ парковок</h2>
-                  <span id="topSubtext">По историческому спросу</span>
-                </div>
-                <label class="search-box">
-                  <i data-lucide="search"></i>
-                  <input id="searchInput" type="search" placeholder="Поиск">
-                </label>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Парковка</th>
-                      <th>Поставить</th>
-                      <th>Спрос</th>
-                      <th>Старт/финиш</th>
-                      <th>Сигнал</th>
-                    </tr>
-                  </thead>
-                  <tbody id="topTable"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="panel insight-panel">
-              <div class="panel-head">
-                <div>
-                  <h2>Часы спроса</h2>
-                  <span>Все парковки Belo Horizonte</span>
-                </div>
-              </div>
-              <div class="hour-chart" id="hourChart"></div>
-              <div class="donor-block">
-                <h3>Донорные зоны</h3>
-                <div id="donorList" class="compact-list"></div>
-              </div>
-            </div>
-          </section>
-        </section>
-      </main>
-    </div>
-
-    <template id="emptyStateTemplate">
-      <div class="empty-state">
-        <div class="empty-icon"><i data-lucide="brain-circuit"></i></div>
-        <strong>Загрузи ежедневный файл аренды</strong>
-        <span>После импорта появятся парковки, часы и приоритеты для Belo Horizonte.</span>
-      </div>
-    </template>
-  </body>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Patinetes BH</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#111315;--panel:#181b1f;--panel2:#20252b;--line:#303740;--text:#f3f7fb;--muted:#93a2b2;--green:#24b47e;--teal:#2dd4bf;--red:#f05252;--amber:#f5b832;--blue:#4f8cff;--violet:#8b5cf6}*{box-sizing:border-box}html,body{height:100%;margin:0}body{font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}.app{height:100%;display:grid;grid-template-rows:auto auto 1fr}header{display:flex;gap:16px;align-items:center;padding:14px 20px;background:#15181c;border-bottom:1px solid var(--line)}.logo{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--blue));display:grid;place-items:center;font-size:23px}.brand{min-width:230px}.brand b{display:block;font-size:17px}.brand span{font-size:12px;color:var(--muted)}.head-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pill{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:7px;padding:7px 10px;font-size:12px}.btn{border:0;border-radius:7px;padding:8px 12px;font-weight:700;cursor:pointer;color:#07110e;background:var(--green)}.btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}.btn.warn{background:var(--amber);color:#1c1300}.tabs{display:flex;background:#15181c;border-bottom:1px solid var(--line);gap:0;overflow-x:auto}.tab{padding:13px 18px;border-bottom:3px solid transparent;color:var(--muted);font-weight:800;white-space:nowrap;cursor:pointer}.tab.active{color:var(--text);border-bottom-color:var(--green);background:rgba(36,180,126,.08)}main{overflow:auto;padding:16px}.view{display:none}.view.active{display:block}.grid{display:grid;gap:14px}.grid.two{grid-template-columns:1fr 1fr}.grid.four{grid-template-columns:repeat(4,1fr)}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.kpi{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--green);border-radius:8px;padding:13px}.kpi .num{font-size:28px;font-weight:900}.kpi .lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}.drop{border:1.5px dashed #495460;background:var(--panel2);border-radius:8px;padding:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:78px;cursor:pointer;transition:border-color .18s,background .18s,box-shadow .18s}.drop:hover{border-color:#667484;background:#242a31}.drop.dragover{border-color:var(--green);background:rgba(36,180,126,.12);box-shadow:0 0 0 3px rgba(36,180,126,.16)}.drop:focus-visible{outline:2px solid var(--green);outline-offset:2px}.drop input{display:none}.drop label{cursor:pointer;font-weight:800}.drop small{display:block;color:var(--muted);font-weight:500;margin-top:4px}.status{color:var(--muted);font-size:12px;text-align:right;min-width:110px}.upload-row{display:flex;align-items:center;gap:12px}.upload-row .drop{flex:1}.gojet-preview{display:none;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:rgba(79,140,255,.08);padding:12px}.mini-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}.mini-stat{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:9px;text-align:center}.mini-stat b{display:block;font-size:20px}.plan-grid{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px}.plan-field{display:grid;gap:5px}.plan-field span{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.plan-field input,.plan-field select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px}.plan-actions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}.plan-summary{color:var(--muted);font-size:12px}@media(max-width:720px){.upload-row{align-items:stretch;flex-direction:column}.mini-stats{grid-template-columns:repeat(2,1fr)}.plan-grid{grid-template-columns:1fr 1fr}}.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.field{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px}table{width:100%;border-collapse:collapse;min-width:780px}th,td{padding:10px 12px;border-bottom:1px solid #293039;text-align:left;font-size:13px}th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;background:var(--panel)}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900}.mon{background:rgba(36,180,126,.16);color:#49e39f}.dia{background:rgba(245,184,50,.16);color:#ffd45c}.noite{background:rgba(79,140,255,.16);color:#82b0ff}.fora{background:rgba(240,82,82,.16);color:#ff7777}.oficina{background:rgba(139,92,246,.18);color:#c4a7ff}.charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}.chart-box{height:285px}.map{height:520px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}.muted{color:var(--muted)}.ok{color:#49e39f}.bad{color:#ff7777}.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(90px);background:#20252b;border:1px solid var(--line);box-shadow:0 16px 50px rgba(0,0,0,.45);padding:10px 16px;border-radius:8px;transition:.25s;z-index:1000}.toast.show{transform:translateX(-50%) translateY(0)}@media(max-width:950px){.grid.four,.grid.two,.charts{grid-template-columns:1fr}body{overflow:auto}.app{height:auto;min-height:100%}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo">BH</div>
+  <div class="brand"><b>Dashboard Patinetes BH</b><span>GitHub Pages version - local browser data</span></div>
+  <div class="head-actions"><span class="pill">Cidade: Belo Horizonte/MG</span><span class="pill" id="save-state">Sem dados</span><button class="btn secondary" id="export-json">Export JSON</button><button class="btn warn" id="clear-data">Limpar</button></div>
+</header>
+<nav class="tabs">
+  <div class="tab active" data-tab="upload">Upload</div>
+  <div class="tab" data-tab="dash">Dashboard</div>
+  <div class="tab" data-tab="points">Pontos</div>
+  <div class="tab" data-tab="map">Mapa</div>
+  <div class="tab" data-tab="battery">Baterias</div>
+</nav>
+<main>
+<section class="view active" id="upload">
+  <div class="grid two">
+    <div class="card"><h3>Pontos Monitores CSV</h3><div class="drop"><div><label for="monitor-file">Arraste CSV aqui ou clique</label><small>city_id;city_name;schedule_id;schedule_name;parking_id;parking_name;lat;lng;capacity</small></div><input id="monitor-file" type="file" accept=".csv,text/csv"><div class="status" id="monitor-status">Obrigatorio para Monitor</div></div></div>
+    <div class="card"><h3>Todos os Pontos / Estacionamentos</h3><div class="upload-row"><button class="btn" id="btn-gojet" type="button">Buscar GoJet</button><span class="muted">ou</span><div class="drop"><div><label for="allpoints-file">Arraste arquivo aqui ou clique</label><small>Colunas aceitas: Nome/Name, LAT, LNG, Zona opcional</small></div><input id="allpoints-file" type="file" accept=".xlsx,.xls,.csv"><div class="status" id="allpoints-status">Opcional, melhora nomes/zonas</div></div></div><div id="gojet-preview" class="gojet-preview"></div></div>
+    <div class="card"><h3>Gerar Monitores</h3><div class="plan-grid"><label class="plan-field"><span>Zona</span><select id="monitor-zone"><option value="">Todas as zonas</option></select></label><label class="plan-field"><span>Ordenar</span><select id="monitor-sort"><option value="capacity">Maior capacity</option><option value="name">Nome</option></select></label><label class="plan-field"><span>Seg-Qui DIA</span><input id="plan-weekday-dia" type="number" min="0" step="1" value="0"></label><label class="plan-field"><span>Seg-Qui NOITE</span><input id="plan-weekday-noite" type="number" min="0" step="1" value="0"></label><label class="plan-field"><span>Seg-Qui AMBOS</span><input id="plan-weekday-ambos" type="number" min="0" step="1" value="0"></label><label class="plan-field"><span>Sexta DIA</span><input id="plan-friday-dia" type="number" min="0" step="1" value="0"></label><label class="plan-field"><span>Sexta NOITE</span><input id="plan-friday-noite" type="number" min="0" step="1" value="0"></label><label class="plan-field"><span>Fim semana</span><input id="plan-weekend" type="number" min="0" step="1" value="0"></label></div><div class="plan-actions"><button class="btn" id="btn-generate-monitors" type="button">Aplicar monitores</button><div class="plan-summary" id="monitor-plan-summary">Carregue Todos os Pontos e escolha a zona</div></div></div>
+    <div class="card"><h3>Movimentacoes XLSX</h3><div class="drop"><div><label for="mov-file">Arraste XLSX aqui ou clique</label><small>Processa pickup/dropoff, responsavel, endereco e horarios no navegador</small></div><input id="mov-file" type="file" accept=".xlsx,.xls"><div class="status" id="mov-status">Nenhum arquivo</div></div></div>
+    <div class="card"><h3>Baterias XLSX</h3><div class="drop"><div><label for="bat-file">Arraste XLSX aqui ou clique</label><small>Resumo de trocas, carga inicial/final e responsaveis</small></div><input id="bat-file" type="file" accept=".xlsx,.xls"><div class="status" id="bat-status">Opcional</div></div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><b>Como funciona no GitHub Pages:</b> tudo roda no seu navegador. Os arquivos nao sao enviados para servidor. O estado fica salvo neste browser.</div>
+</section>
+<section class="view" id="dash">
+  <div class="grid four" id="kpis"></div>
+  <div class="charts" style="margin-top:14px"><div class="card chart-box"><canvas id="chart-type"></canvas></div><div class="card chart-box"><canvas id="chart-top"></canvas></div></div>
+  <div class="card" style="margin-top:14px"><h3>Resumo por Zona</h3><div class="table-wrap"><table id="zone-table"></table></div></div>
+</section>
+<section class="view" id="points">
+  <div class="filters"><input class="field" id="search" placeholder="Buscar ponto/responsavel"><select class="field" id="type-filter"><option value="">Todos os tipos</option><option>Monitor DIA</option><option>Monitor NOITE</option><option>Monitor AMBOS</option><option>Monitor FDS</option><option>Fora Monitor</option><option>Oficina</option></select><select class="field" id="period-filter"><option value="total">Total</option><option value="manha">DIA</option><option value="tarde">NOITE</option></select></div>
+  <div class="table-wrap"><table id="points-table"></table></div>
+</section>
+<section class="view" id="map"><div id="leaflet" class="map"></div></section>
+<section class="view" id="battery"><div class="grid four" id="bat-kpis"></div><div class="card" style="margin-top:14px"><div class="table-wrap"><table id="bat-table"></table></div></div></section>
+</main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const CITY = 'Belo Horizonte/MG';
+const MONITOR_RADIUS_M = 80;
+const ALLPOINT_RADIUS_M = 80;
+const STORE_KEY = 'dashboard-patinetes-bh-static-v2';
+const OLD_STORE_KEY = 'dashboard-patinetes-bh-static-v1';
+const GOJET_API = 'https://logistic.gojet.app/api/v0/urent';
+const GOJET_PROXY = '/api/gojet-parkings';
+const DEFAULT_MONITOR_PLAN = {zone:'',sort:'capacity',weekdayDia:0,weekdayNoite:0,weekdayAmbos:0,fridayDia:0,fridayNoite:0,weekend:0};
+const state = {monitors:[], allPoints:[], rawMovements:[], movements:[], invalidMovements:0, points:[], zones:[], stats:null, batteries:[], batStats:null, gojet:null, monitorPlan:{...DEFAULT_MONITOR_PLAN}};
+let chartType, chartTop, map, markerLayer;
+const $ = (id)=>document.getElementById(id);
+function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3000)}
+function clean(s){return String(s??'').trim()}
+function norm(s){return clean(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9\s]/gi,' ').replace(/\s+/g,' ').trim()}
+function num(v){if(typeof v==='number')return v; const n=parseFloat(String(v??'').replace(',','.')); return Number.isFinite(n)?n:0}
+function parseCapacity(v){const raw=clean(v);if(raw==='')return '';const match=raw.replace(',','.').match(/-?\d+(?:\.\d+)?/);if(!match)return '';const n=parseFloat(match[0]);if(!Number.isFinite(n))return '';return Number.isInteger(n)?n:Number(n.toFixed(2))}
+function hasCap(v){if(v===null||v===undefined||v==='')return false;const n=Number(String(v).replace(',','.'));return Number.isFinite(n)}
+function capNum(v){const n=Number(String(v??'').replace(',','.'));return Number.isFinite(n)?n:0}
+function capText(v){return hasCap(v)?esc(v):'-'}
+function firstCapacity(...vals){for(const v of vals){const cap=parseCapacity(v);if(hasCap(cap))return cap}return ''}
+function hasCoord(lat,lng){return Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)>0.0001&&Math.abs(lng)>0.0001&&Math.abs(lat)<=90&&Math.abs(lng)<=180}
+function parseCoord(v){const s=String(v??'');const m=s.match(/(-?\d{1,3}(?:[\.,]\d+)?)\s*[,;]\s*(-?\d{1,3}(?:[\.,]\d+)?)/)||s.match(/(-?\d{1,3}\.\d{3,})\s+(-?\d{1,3}\.\d{3,})/);if(!m)return [0,0];const lat=num(m[1]),lng=num(m[2]);return hasCoord(lat,lng)?[lat,lng]:[0,0]}
+function hav(lat1,lng1,lat2,lng2){const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
+function findNearest(list,lat,lng,radius){if(!lat||!lng)return null;let best=null,bd=radius;for(const p of list){if(!p.lat||!p.lng)continue;const d=hav(lat,lng,p.lat,p.lng);if(d<bd){bd=d;best={...p,dist:d}}}return best}
+function findVal(row, aliases, opts={}){const keys=Object.keys(row||{});for(const a of aliases){if(row[a]!==undefined&&row[a]!== '')return row[a]}for(const a of aliases){const na=norm(a);for(const k of keys){const nk=norm(k);if(nk===na)return row[k]}}if(opts.exactOnly)return '';for(const a of aliases){const na=norm(a);if(!na||na.length<5)continue;for(const k of keys){const nk=norm(k);if(nk.includes(na)||na.includes(nk))return row[k]}}return ''}
+function findTextPoint(list,text){const q=norm(text);if(!q||q.length<4)return null;let best=null,score=0;for(const p of list||[]){const n=norm(p.name||p.endereco||'');if(!n)continue;let s=0;if(n===q)s=100;else if(q.includes(n)||n.includes(q))s=Math.min(n.length,q.length);if(s>score){score=s;best=p}}return score>=6?best:null}
+function getMovement(row){return {status:findVal(row,['Status']),veiculo:findVal(row,['Numero do Veiculo','Numero Veiculo','Vehicle Number','Veiculo','Patinete']),resp:findVal(row,['Responsavel','Executor','Worker']),coletaEntrega:findVal(row,['Coleta/Entrega','Pickup/Delivery','\u041f\u043e\u0433\u0440\u0443\u0437\u043a\u0430/\u0412\u044b\u0433\u0440\u0443\u0437\u043a\u0430'],{exactOnly:true}),endereco:clean(findVal(row,['Endereco de Entrega','Endereco Entrega','Delivery Address','Address','\u0410\u0434\u0440\u0435\u0441 \u0432\u044b\u0433\u0440\u0443\u0437\u043a\u0438'])),trabalho:clean(findVal(row,['Trabalho Realizado','Work Done'])),tipoEntrega:findVal(row,['Tipo de Entrega','Tipo Entrega','Delivery Type']),pickup:findVal(row,['Pickup','Coleta','Origem','\u041f\u043e\u0433\u0440\u0443\u0437\u043a\u0430'],{exactOnly:true}),dropoff:findVal(row,['Dropoff','Entrega','Destino','\u0412\u044b\u0433\u0440\u0443\u0437\u043a\u0430'],{exactOnly:true})}}
+function coordFromRow(row,pairAliases,latAliases,lngAliases){let pair=findVal(row,pairAliases,{exactOnly:true});let [lat,lng]=parseCoord(pair);if(hasCoord(lat,lng))return [lat,lng];lat=num(findVal(row,latAliases));lng=num(findVal(row,lngAliases));return hasCoord(lat,lng)?[lat,lng]:[0,0]}
+function readFileText(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsText(file,'utf-8')})}
+function readWorkbook(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{try{const wb=XLSX.read(new Uint8Array(r.result),{type:'array',codepage:65001});const sh=wb.Sheets[wb.SheetNames[0]];res(XLSX.utils.sheet_to_json(sh,{defval:''}))}catch(e){rej(e)}};r.onerror=rej;r.readAsArrayBuffer(file)})}
+function parseCsv(text){const lines=text.split(/\r?\n/).filter(Boolean);return lines.map(line=>line.split(';').length>1?line.split(';'):line.split(','))}
+function save(){const small={monitors:state.monitors,allPoints:state.allPoints,points:state.points,zones:state.zones,stats:state.stats,batteries:state.batteries.slice(0,500),batStats:state.batStats,gojet:state.gojet,monitorPlan:ensureMonitorPlan(),invalidMovements:state.invalidMovements||0};try{localStorage.setItem(STORE_KEY,JSON.stringify(small));$('save-state').textContent='Salvo local'}catch(e){$('save-state').textContent='Dados em memoria'}}
+function sanitizeLoadedState(){state.monitorPlan={...DEFAULT_MONITOR_PLAN,...(state.monitorPlan||{})};state.allPoints=(state.allPoints||[]).map(p=>({...p,cap:parseCapacity(p.cap),zone:clean(p.zone)||'Sem Zona'}));state.monitors=(state.monitors||[]).map(p=>({...p,cap:parseCapacity(p.cap),schedule:scheduleType(p.schedule||'dia')}));const bad=(state.points||[]).some(p=>String(p.name||'').includes('0.00000, 0.00000'));if(bad){state.rawMovements=[];state.movements=[];state.points=[];state.stats=null;state.invalidMovements=0;setTimeout(()=>toast('Cache antigo com GPS 0,0 foi limpo. Recarregue Movimentacoes.'),300)}}
+function load(){try{const raw=localStorage.getItem(STORE_KEY)||localStorage.getItem(OLD_STORE_KEY);if(!raw)return;Object.assign(state,JSON.parse(raw));sanitizeLoadedState();renderAll();$('save-state').textContent='Carregado local'}catch(e){}}
+function scheduleType(s){s=norm(s);const friday=s.includes('sexta')||s.includes('friday')||s.includes('fri'),weekday=s.includes('seg')||s.includes('weekday')||s.includes('mon thu')||s.includes('mon qui');if(s.includes('ambos')||s.includes('both'))return 'ambos';if(s.includes('weekend')||s.includes('fds')||s.includes('fim'))return 'fds';if(friday&&(s.includes('noite')||s.includes('evening')))return 'sexta_noite';if(friday)return 'sexta_dia';if(weekday&&(s.includes('noite')||s.includes('evening')))return 'weekday_noite';if(weekday)return 'weekday_dia';if(s.includes('evening')||s.includes('noite'))return 'noite';return 'dia'}
+function ensureMonitorPlan(){state.monitorPlan={...DEFAULT_MONITOR_PLAN,...(state.monitorPlan||{})};return state.monitorPlan}
+function countField(id){const el=$(id);return Math.max(0,parseInt(el?.value||'0',10)||0)}
+function readMonitorPlan(){const plan=ensureMonitorPlan();if(!$('monitor-zone'))return plan;plan.zone=$('monitor-zone').value;plan.sort=$('monitor-sort').value||'capacity';plan.weekdayDia=countField('plan-weekday-dia');plan.weekdayNoite=countField('plan-weekday-noite');plan.weekdayAmbos=countField('plan-weekday-ambos');plan.fridayDia=countField('plan-friday-dia');plan.fridayNoite=countField('plan-friday-noite');plan.weekend=countField('plan-weekend');return plan}
+function zoneOptions(){return [...new Set((state.allPoints||[]).map(p=>clean(p.zone)||'Sem Zona'))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR'))}
+function monitorPointKey(p){return clean(p.gojetId)||norm(p.name)+'|'+Number(p.lat).toFixed(5)+'|'+Number(p.lng).toFixed(5)}
+function monitorCandidates(plan){const zone=clean(plan.zone);const seen=new Set(),rows=[];for(const p of state.allPoints||[]){if(!hasCoord(p.lat,p.lng))continue;const pzone=clean(p.zone)||'Sem Zona';if(zone&&pzone!==zone)continue;const key=monitorPointKey(p);if(seen.has(key))continue;seen.add(key);rows.push({...p,zone:pzone,cap:parseCapacity(p.cap)})}rows.sort((a,b)=>plan.sort==='name'?clean(a.name).localeCompare(clean(b.name),'pt-BR'):(capNum(b.cap)-capNum(a.cap)||clean(a.name).localeCompare(clean(b.name),'pt-BR')));return rows}
+function renderMonitorPlan(){if(!$('monitor-zone'))return;const plan=ensureMonitorPlan();const zones=zoneOptions();const current=plan.zone||'';$('monitor-zone').innerHTML='<option value="">Todas as zonas</option>'+zones.map(z=>`<option value="${esc(z)}">${esc(z)}</option>`).join('');$('monitor-zone').value=current&&zones.includes(current)?current:'';plan.zone=$('monitor-zone').value;$('monitor-sort').value=plan.sort||'capacity';$('plan-weekday-dia').value=plan.weekdayDia||0;$('plan-weekday-noite').value=plan.weekdayNoite||0;$('plan-weekday-ambos').value=plan.weekdayAmbos||0;$('plan-friday-dia').value=plan.fridayDia||0;$('plan-friday-noite').value=plan.fridayNoite||0;$('plan-weekend').value=plan.weekend||0;const available=monitorCandidates(plan).length;const requested=(plan.weekdayDia||0)+(plan.weekdayNoite||0)+(plan.weekdayAmbos||0)+(plan.fridayDia||0)+(plan.fridayNoite||0)+(plan.weekend||0);$('monitor-plan-summary').innerHTML=available?`${available} pontos disponiveis${plan.zone?' em '+esc(plan.zone):''} - ${requested} selecionados`:'Carregue Todos os Pontos para gerar monitores'}
+function takeMonitorCandidates(pool,used,count){const out=[];for(const p of pool){if(out.length>=count)break;const key=monitorPointKey(p);if(used.has(key))continue;used.add(key);out.push(p)}return out}
+function addGeneratedMonitor(out,p,schedule,label){out.push({name:p.name,lat:p.lat,lng:p.lng,zone:p.zone||'Sem Zona',cap:parseCapacity(p.cap),schedule,source:'gerado',label})}
+function generateMonitorsFromPlan(){const plan=readMonitorPlan();const pool=monitorCandidates(plan);if(!pool.length){$('monitor-plan-summary').innerHTML='<span class="bad">Nenhum ponto nesta zona</span>';toast('Carregue pontos ou escolha outra zona');return}const used=new Set(),out=[];const add=(count,schedule,label)=>takeMonitorCandidates(pool,used,count).forEach(p=>addGeneratedMonitor(out,p,schedule,label));add(plan.weekdayDia,'weekday_dia','Seg-Qui DIA');add(plan.weekdayNoite,'weekday_noite','Seg-Qui NOITE');takeMonitorCandidates(pool,used,plan.weekdayAmbos).forEach(p=>{addGeneratedMonitor(out,p,'weekday_dia','Seg-Qui AMBOS');addGeneratedMonitor(out,p,'weekday_noite','Seg-Qui AMBOS')});add(plan.fridayDia,'sexta_dia','Sexta DIA');add(plan.fridayNoite,'sexta_noite','Sexta NOITE');add(plan.weekend,'fds','Fim semana');state.monitors=out;$('monitor-status').innerHTML='<span class="ok">'+out.length+' regras geradas</span>';const physical=new Set(out.map(m=>monitorPointKey(m))).size;$('monitor-plan-summary').innerHTML='<span class="ok">'+physical+' pontos fisicos / '+out.length+' regras aplicadas</span>';refreshAfterReferenceData();toast('Monitores gerados com capacity original')}
+let gojetCitiesMap=null;
+function gojetCityFallback(){return {'belo horizonte':'690388c7ad28bbbf340407e0','belo horizonte mg':'690388c7ad28bbbf340407e0'}}
+async function loadGoJetCities(){if(gojetCitiesMap)return;gojetCitiesMap=gojetCityFallback();try{const r=await fetch(GOJET_API+'/cities',{headers:{Accept:'application/json'}});if(!r.ok)throw new Error('HTTP '+r.status);const cities=await r.json();if(Array.isArray(cities)){for(const c of cities){if(c&&c.name&&c.id)gojetCitiesMap[norm(c.name)]=c.id}}}catch(e){console.warn('GoJet cities fallback:',e)}}
+function findGoJetCityId(city){const n=norm(city).replace(/\bmg\b/g,'').trim();const map=gojetCitiesMap||gojetCityFallback();return map[n]||map[norm(city)]||map['belo horizonte']||null}
+function goJetEntries(data){if(Array.isArray(data))return data;if(Array.isArray(data?.entries))return data.entries;if(Array.isArray(data?.data))return data.data;if(Array.isArray(data?.items))return data.items;return []}
+async function fetchGoJetJson(url){const r=await fetch(url,{headers:{Accept:'application/json'}});const txt=await r.text();if(!r.ok)throw new Error('GoJet HTTP '+r.status);if(/^\s*</.test(txt))throw new Error('GoJet bloqueou acesso direto no navegador. Use o upload XLSX/CSV ou configure um proxy.');return JSON.parse(txt)}
+async function buscarPontosGoJetDireto(city,status){await loadGoJetCities();const cityId=findGoJetCityId(city);if(!cityId)throw new Error('Cidade nao encontrada na GoJet: '+city);let page=1,totalPages=1,totalItems=0,all=[];while(page<=totalPages&&page<=30){status.textContent='Tentando navegador: pagina '+page+'...';const data=await fetchGoJetJson(GOJET_API+'/parkings?city_id='+encodeURIComponent(cityId)+'&page='+page+'&limit=500');const entries=goJetEntries(data);all=all.concat(entries);totalPages=parseInt(data.total_pages||data.totalPages||1,10)||1;totalItems=parseInt(data.total_items||data.totalItems||all.length,10)||all.length;if(page<totalPages)status.textContent='Tentando navegador '+all.length+'/'+totalItems+' pontos...';page++}const rows=[];let monitores=0,normais=0,totalBikes=0;for(const pk of all){const name=clean(pk.name||pk.parking_name||pk.parkingName||pk.title);const lat=num(pk.latitude||pk.parking_latitude||pk.parkingLatitude||pk.lat);const lng=num(pk.longitude||pk.parking_longitude||pk.parkingLongitude||pk.lng||pk.lon);if(!name||!lat||!lng)continue;const cap=firstCapacity(pk.capacity,pk.expected_bikes_count,pk.expected);const monitor=pk.monitor===true||pk.is_monitor===true;if(monitor)monitores++;else normais++;totalBikes+=parseInt(pk.bikes_count||pk.bikesCount||0,10)||0;rows.push({name,lat,lng,zone:'Sem Zona',cap,gojetId:pk.id||'',monitor,bikes:pk.bikes_count||0})}return {rows,meta:{city,total:rows.length,monitores,normais,totalBikes,gojetCityId:cityId}}}
+function salvarPontosGoJet(rows,meta,status){if(!rows.length)throw new Error('Nenhum ponto encontrado para '+(meta.city||CITY));state.allPoints=rows;state.gojet={city:meta.city||CITY,total:rows.length,monitores:meta.monitores??rows.filter(p=>p.monitor).length,normais:meta.normais??rows.filter(p=>!p.monitor).length,totalBikes:meta.totalBikes??rows.reduce((s,p)=>s+(p.bikes||0),0),gojetCityId:meta.gojetCityId||'',loadedAt:new Date().toISOString()};status.innerHTML='<span class="ok">'+rows.length+' pontos GoJet</span>';renderGoJetPreview(state.gojet);refreshAfterReferenceData();toast(rows.length+' pontos da GoJet carregados')}
+async function buscarPontosGoJet(){const btn=$('btn-gojet'),status=$('allpoints-status');const city=CITY.replace('/MG','');btn.disabled=true;btn.textContent='Buscando...';status.textContent='Conectando ao backend Netlify...';try{let rows=[],meta={},backendErr=null;try{const r=await fetch(GOJET_PROXY+'?city='+encodeURIComponent(city),{headers:{Accept:'application/json'}});const txt=await r.text();let data;try{data=JSON.parse(txt)}catch(_){throw new Error('Backend GoJet retornou resposta invalida')}if(!r.ok||!data.ok)throw new Error(data?.msg||('GoJet HTTP '+r.status));rows=(data.rows||[]).map(p=>({name:clean(p.name),lat:num(p.lat),lng:num(p.lng),zone:clean(p.zone)||'Sem Zona',cap:parseCapacity(p.cap),gojetId:p.gojetId||'',monitor:p.monitor===true,bikes:parseInt(p.bikes||0,10)||0})).filter(p=>p.name&&p.lat&&p.lng);meta={city:data.cidade||city,monitores:data.monitores,normais:data.normais,totalBikes:data.totalBikes,gojetCityId:data.gojetCityId||''}}catch(e){backendErr=e;if(!/403|challenge|bloque/i.test(e.message))throw e;status.textContent='GoJet bloqueou o backend, tentando pelo navegador...';const direct=await buscarPontosGoJetDireto(city,status);rows=direct.rows;meta=direct.meta}try{salvarPontosGoJet(rows,meta,status)}catch(e){throw e}}catch(e){const blocked=/403|challenge|bloque/i.test(e.message);status.innerHTML=blocked?'<span class="bad">GoJet bloqueou acesso automatico (403). Use XLSX/CSV ou credencial API.</span>':'<span class="bad">Erro GoJet</span>';toast(blocked?'GoJet bloqueou acesso automatico. Use upload XLSX/CSV.':'Erro GoJet: '+e.message)}finally{btn.disabled=false;btn.textContent='Buscar GoJet'}}
+function renderGoJetPreview(g){const el=$('gojet-preview');if(!el)return;if(!g){el.style.display='none';el.innerHTML='';return}el.style.display='block';el.innerHTML='<b>'+esc(g.city||CITY)+' - '+(g.total||0)+' pontos carregados da GoJet</b><div class="mini-stats"><div class="mini-stat"><b class="ok">'+(g.total||0)+'</b><span class="muted">TOTAL</span></div><div class="mini-stat"><b>'+(g.monitores||0)+'</b><span class="muted">MONITORES</span></div><div class="mini-stat"><b>'+(g.normais||0)+'</b><span class="muted">NORMAIS</span></div><div class="mini-stat"><b>'+(g.totalBikes||0)+'</b><span class="muted">PATINETES</span></div></div>'}
+async function handleMonitor(file){const rows=parseCsv(await readFileText(file));const out=[];for(let i=1;i<rows.length;i++){const c=rows[i];if(c.length<9)continue;out.push({name:clean(c[5]||c[0]),lat:num(c[6]),lng:num(c[7]),cap:parseCapacity(c[8]),schedule:scheduleType(c[3]||c[4])})}state.monitors=out.filter(p=>p.name&&p.lat&&p.lng);$('monitor-status').innerHTML='<span class="ok">'+state.monitors.length+' pontos</span>';refreshAfterReferenceData();toast('Pontos Monitores carregados')}
+async function handleAllPoints(file){let rows=[];if(/\.csv$/i.test(file.name)){const csv=parseCsv(await readFileText(file));const head=(csv.shift()||[]).map(norm);rows=csv.map(c=>Object.fromEntries(head.map((h,i)=>[h,c[i]])))}else rows=await readWorkbook(file);state.allPoints=rows.map(r=>{const name=findVal(r,['Nome','Name','Parking Name','Ponto']);const lat=findVal(r,['LAT','Lat','Latitude','lat']);const lng=findVal(r,['LNG','Lng','Longitude','LON','lng','lon']);const zone=findVal(r,['Zona','Zone','zona']);const cap=findVal(r,['Capacidade','Capacity','capacity','cap']);return {name:clean(name),lat:num(lat),lng:num(lng),zone:clean(zone)||'Sem Zona',cap:parseCapacity(cap)}}).filter(p=>p.name&&p.lat&&p.lng);state.gojet=null;$('allpoints-status').innerHTML='<span class="ok">'+state.allPoints.length+' pontos</span>';refreshAfterReferenceData();toast('Todos os pontos carregados')}
+function splitDeliveryTime(v){const s=String(v||'');const parts=s.split('/');const target=(parts[1]||parts[0]||'').trim();const m=target.match(/(\d{1,2}):(\d{2})/);return m?m[1].padStart(2,'0')+':'+m[2]:''}
+function validDate(y,m,d){const dt=new Date(y,m-1,d);return dt.getFullYear()===y&&dt.getMonth()===m-1&&dt.getDate()===d?dt:null}
+function parseMovementDateValue(v){const s=clean(v);if(!s)return null;let m=s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);if(m)return validDate(+m[1],+m[2],+m[3]);m=s.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);if(!m)return null;let y=+m[3];if(y<100)y+=2000;return validDate(y,+m[2],+m[1])}
+function movementDate(row){return parseMovementDateValue(findVal(row,['Data','Date','Fecha','Dia','Data Entrega','Data de Entrega','Delivery Date','Created At','Data/Hora']))||parseMovementDateValue(String(findVal(row,['Coleta/Entrega','Pickup/Delivery'],{exactOnly:true})).split('/')[0])}
+function isOficina(s){s=norm(s);return ['oficina','centro de servico','centro de servi','service center'].some(x=>s.includes(x))}
+function monitorMembership(match,row){const date=movementDate(row),noDate=!date,dow=date?date.getDay():-1,weekday=!!date&&dow>=1&&dow<=4,friday=!!date&&dow===5,weekend=!!date&&(dow===0||dow===6);const near=state.monitors.filter(p=>hasCoord(match.lat,match.lng)&&hav(match.lat,match.lng,p.lat,p.lng)<2);const dia=near.some(p=>p.schedule==='dia'||p.schedule==='ambos'||((weekday||noDate)&&p.schedule==='weekday_dia')||(friday&&p.schedule==='sexta_dia')),noite=near.some(p=>p.schedule==='noite'||p.schedule==='ambos'||((weekday||noDate)&&p.schedule==='weekday_noite')||(friday&&p.schedule==='sexta_noite')),fds=near.some(p=>p.schedule==='fds'&&(!date||weekend));return {dia,noite,fds}}
+function classifyMovement(row){const r=getMovement(row);if(!r.endereco&&!r.dropoff&&!r.coletaEntrega&&!r.veiculo&&!r.tipoEntrega)return null;const horaEntrega=findVal(row,['Hora Entrega','Delivery Time','Hora'])||splitDeliveryTime(r.coletaEntrega);const hour=horaEntrega?parseInt(String(horaEntrega).split(':')[0],10):-1;const bloco=hour>=0&&hour<12?'DIA':hour>=12?'NOITE':'SEM HORA';let [dropLat,dropLng]=coordFromRow(row,['Dropoff','Entrega','Destino','\u0412\u044b\u0433\u0440\u0443\u0437\u043a\u0430'],['Dropoff Lat','Dropoff Latitude','Latitude Dropoff','Delivery Lat','LAT Entrega','Lat Entrega','Latitude Entrega','Destino Lat','dropoff_latitude'],['Dropoff Lng','Dropoff Lon','Dropoff Longitude','Longitude Dropoff','Delivery Lng','Delivery Lon','LNG Entrega','Lng Entrega','Longitude Entrega','Destino Lng','dropoff_longitude']);let [pickLat,pickLng]=coordFromRow(row,['Pickup','Coleta','Origem','\u041f\u043e\u0433\u0440\u0443\u0437\u043a\u0430'],['Pickup Lat','Pickup Latitude','Latitude Pickup','LAT Coleta','Lat Coleta','Origem Lat','pickup_latitude'],['Pickup Lng','Pickup Lon','Pickup Longitude','Longitude Pickup','LNG Coleta','Lng Coleta','Origem Lng','pickup_longitude']);let endereco=clean(r.endereco)||clean(r.tipoEntrega);if(!endereco&&hasCoord(dropLat,dropLng))endereco=dropLat.toFixed(6)+', '+dropLng.toFixed(6);if(!endereco&&!hasCoord(dropLat,dropLng))return null;const resp=clean(r.resp)||'Desconhecido';const veiculo=clean(r.veiculo);const oficina=isOficina(endereco)||isOficina(r.trabalho)||isOficina(r.tipoEntrega);let tipo='Fora Monitor',cap='',monitor=null,all=null;if(oficina){tipo='Oficina'}else{monitor=hasCoord(dropLat,dropLng)?findNearest(state.monitors,dropLat,dropLng,MONITOR_RADIUS_M):findTextPoint(state.monitors,endereco);if(monitor){const m=monitorMembership(monitor,row);cap=monitor.cap;if(m.dia&&m.noite)tipo='Monitor AMBOS';else if(m.dia)tipo='Monitor DIA';else if(m.noite)tipo='Monitor NOITE';else if(m.fds)tipo='Monitor FDS';else monitor=null}}all=hasCoord(dropLat,dropLng)?findNearest(state.allPoints,dropLat,dropLng,ALLPOINT_RADIUS_M):findTextPoint(state.allPoints,endereco);const name=all?.name||monitor?.name||endereco;const zone=all?.zone||'Sem Zona';const lat=monitor?.lat||all?.lat||dropLat||pickLat||0;const lng=monitor?.lng||all?.lng||dropLng||pickLng||0;return {name,zone,tipo,cap:hasCap(cap)?cap:(hasCap(all?.cap)?all.cap:''),dropLat:lat,dropLng:lng,horaEntrega,bloco,resp,veiculo,total:1,manha:bloco==='DIA'?1:0,tarde:bloco==='NOITE'?1:0}}
+function parseMovementRows(rows){let invalid=0;const valid=[];for(const row of rows||[]){const m=classifyMovement(row);if(m)valid.push(m);else invalid++}return {valid,invalid}}
+function updateMovStatus(){const bad=state.invalidMovements||0;const good=(state.movements||[]).length;const msg='<span class="'+(good?'ok':'bad')+'">'+good+' movimentos'+(bad?' ('+bad+' sem GPS ignorados)':'')+'</span>';$('mov-status').innerHTML=msg}
+function refreshAfterReferenceData(){if(state.rawMovements&&state.rawMovements.length){const parsed=parseMovementRows(state.rawMovements);state.movements=parsed.valid;state.invalidMovements=parsed.invalid;aggregateMovements();updateMovStatus()}save();renderAll()}
+async function handleMov(file){$('mov-status').textContent='Lendo XLSX...';const rows=await readWorkbook(file);state.rawMovements=rows;const parsed=parseMovementRows(rows);state.movements=parsed.valid;state.invalidMovements=parsed.invalid;aggregateMovements();updateMovStatus();save();renderAll();showTab('dash');toast('Movimentacoes processadas')}
+function aggregateMovements(){const points=new Map();const stats={total:0,monitor:0,fora:0,oficina:0,manha:0,tarde:0,dia:0,noite:0,ambos:0,fds:0};for(const m of state.movements){stats.total++;if(m.bloco==='DIA')stats.manha++;if(m.bloco==='NOITE')stats.tarde++;if(m.tipo==='Oficina')stats.oficina++;else if(m.tipo==='Fora Monitor')stats.fora++;else{stats.monitor++;if(m.tipo==='Monitor DIA')stats.dia++;else if(m.tipo==='Monitor NOITE')stats.noite++;else if(m.tipo==='Monitor AMBOS')stats.ambos++;else if(m.tipo==='Monitor FDS')stats.fds++}const key=[m.name,m.zone,m.tipo].join('|');if(!points.has(key))points.set(key,{name:m.name,zone:m.zone,tipo:m.tipo,total:0,manha:0,tarde:0,cap:m.cap,lat:m.dropLat,lng:m.dropLng,resps:{}});const p=points.get(key);p.total++;p.manha+=m.manha;p.tarde+=m.tarde;p.resps[m.resp]=(p.resps[m.resp]||0)+1}state.points=[...points.values()].map(p=>({...p,responsaveis:Object.entries(p.resps).map(([nome,qtd])=>({nome,qtd})).sort((a,b)=>b.qtd-a.qtd)})).sort((a,b)=>b.total-a.total);state.stats=stats}
+async function handleBat(file){const rows=await readWorkbook(file);state.batteries=rows.map(r=>{const resp=clean(findVal(r,['Responsavel','Executor','Worker']))||'Desconhecido';const ci=parseInt(findVal(r,['Carga inicial','Carga Inicial','Initial Charge'])||0,10)||0;const cf=parseInt(findVal(r,['Carga final','Carga Final','Final Charge'])||0,10)||0;return {resp,ci,cf,delta:cf-ci,veiculo:findVal(r,['Patinete','Veiculo','Vehicle'])}});const total=state.batteries.length, avg=total?Math.round(state.batteries.reduce((s,b)=>s+b.cf,0)/total):0;const people={};state.batteries.forEach(b=>people[b.resp]=(people[b.resp]||0)+1);state.batStats={total,avg,people};$('bat-status').innerHTML=`<span class="ok">${total} trocas</span>`;save();renderBatteries();showTab('battery');toast('Baterias processadas')}
+function chip(t){if(t==='Monitor DIA')return '<span class="chip dia">Monitor DIA</span>';if(t==='Monitor NOITE')return '<span class="chip noite">Monitor NOITE</span>';if(t==='Monitor AMBOS')return '<span class="chip mon">Monitor AMBOS</span>';if(t==='Monitor FDS')return '<span class="chip mon">Monitor FDS</span>';if(t==='Oficina')return '<span class="chip oficina">Oficina</span>';return '<span class="chip fora" title="Nao encontrado no CSV de Pontos Monitores dentro do raio GPS">Fora Monitor</span>'}
+function renderKPIs(){const s=state.stats||{total:0,monitor:0,fora:0,oficina:0,manha:0,tarde:0};$('kpis').innerHTML=[['Total',s.total,varCss('--green')],['Monitor',s.monitor,varCss('--teal')],['Fora Monitor',s.fora,varCss('--red')],['Oficina',s.oficina,varCss('--violet')]].map(([l,n,c])=>`<div class="kpi" style="border-left-color:${c}"><div class="num">${n||0}</div><div class="lab">${l}</div></div>`).join('')}
+function varCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v)}
+function renderCharts(){const s=state.stats||{};chartType?.destroy();chartTop?.destroy();chartType=new Chart($('chart-type'),{type:'doughnut',data:{labels:['Monitor DIA','Monitor NOITE','Monitor AMBOS','Fora Monitor','Oficina'],datasets:[{data:[s.dia||0,s.noite||0,s.ambos||0,s.fora||0,s.oficina||0],backgroundColor:['#f5b832','#4f8cff','#24b47e','#f05252','#8b5cf6']}]},options:{maintainAspectRatio:false,plugins:{legend:{labels:{color:'#f3f7fb'}}}}});const top=state.points.slice(0,10);chartTop=new Chart($('chart-top'),{type:'bar',data:{labels:top.map(p=>p.name.slice(0,30)),datasets:[{label:'Movimentos',data:top.map(p=>p.total),backgroundColor:'#24b47e',borderRadius:4}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#93a2b2'},grid:{color:'#2b323a'}},y:{ticks:{color:'#93a2b2'},grid:{display:false}}}}})}
+function renderZoneTable(){const zones={};for(const p of state.points){const z=p.zone||'Sem Zona';zones[z]??={total:0,monitor:0,fora:0};zones[z].total+=p.total;if(p.tipo==='Fora Monitor')zones[z].fora+=p.total;else if(p.tipo!=='Oficina')zones[z].monitor+=p.total}$('zone-table').innerHTML='<thead><tr><th>Zona</th><th>Total</th><th>Monitor</th><th>Fora Monitor</th><th>% Monitor</th></tr></thead><tbody>'+Object.entries(zones).map(([z,d])=>`<tr><td><b>${z}</b></td><td>${d.total}</td><td>${d.monitor}</td><td>${d.fora}</td><td class="ok"><b>${d.total?Math.round(d.monitor/d.total*100):0}%</b></td></tr>`).join('')+'</tbody>'}
+function renderPoints(){const q=norm($('search').value),tf=$('type-filter').value,pf=$('period-filter').value;let rows=state.points.filter(p=>(!tf||p.tipo===tf)&&(!q||norm(p.name+' '+p.zone+' '+p.responsaveis.map(r=>r.nome).join(' ')).includes(q)));rows.sort((a,b)=>(b[pf]||0)-(a[pf]||0));$('points-table').innerHTML='<thead><tr><th>#</th><th>Ponto de Entrega</th><th>Zona</th><th>Tipo</th><th>Total</th><th>DIA</th><th>NOITE</th><th>Cap.</th><th>Giro/Cap.</th><th>Responsaveis</th></tr></thead><tbody>'+rows.map((p,i)=>{const val=pf==='manha'?p.manha:pf==='tarde'?p.tarde:p.total;const capN=capNum(p.cap);const giro=capN>0?`${(val/capN).toFixed(1)}x`:'-';const res=p.tipo==='Fora Monitor'?p.responsaveis.slice(0,3).map(r=>`<span class="chip fora">${r.nome} (${r.qtd})</span>`).join(' '):'-';return `<tr><td class="muted">${i+1}</td><td><b>${esc(p.name)}</b></td><td class="muted">${esc(p.zone||'')}</td><td>${chip(p.tipo)}</td><td><b>${p.total}</b></td><td>${p.manha}</td><td>${p.tarde}</td><td>${capText(p.cap)}</td><td>${giro}</td><td>${res}</td></tr>`}).join('')+'</tbody>'}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function renderMap(){if(!$('leaflet'))return;if(!map){map=L.map('leaflet').setView([-19.9167,-43.9345],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OpenStreetMap'}).addTo(map);markerLayer=L.layerGroup().addTo(map)}markerLayer.clearLayers();const bounds=[];for(const p of state.points){if(!p.lat||!p.lng)continue;const color=p.tipo==='Fora Monitor'?'#f05252':p.tipo==='Oficina'?'#8b5cf6':'#24b47e';const icon=L.divIcon({className:'',html:`<div style="width:22px;height:22px;border-radius:50%;background:${color};border:2px solid #fff;display:grid;place-items:center;font-size:10px;font-weight:900;color:#fff">${Math.min(99,p.total)}</div>`});L.marker([p.lat,p.lng],{icon}).bindPopup(`<b>${esc(p.name)}</b><br>${chip(p.tipo)}<br>Total: ${p.total}<br>Cap: ${capText(p.cap)}`).addTo(markerLayer);bounds.push([p.lat,p.lng])}if(bounds.length)map.fitBounds(bounds,{padding:[24,24]});setTimeout(()=>map.invalidateSize(),80)}
+function renderBatteries(){const s=state.batStats||{total:0,avg:0,people:{}};$('bat-kpis').innerHTML=[['Trocas',s.total],['Carga final media',s.avg+'%'],['Pessoas',Object.keys(s.people||{}).length],['Cidade','BH']].map(([l,n])=>`<div class="kpi"><div class="num">${n}</div><div class="lab">${l}</div></div>`).join('');$('bat-table').innerHTML='<thead><tr><th>Responsavel</th><th>Trocas</th></tr></thead><tbody>'+Object.entries(s.people||{}).sort((a,b)=>b[1]-a[1]).map(([n,q])=>`<tr><td><b>${esc(n)}</b></td><td>${q}</td></tr>`).join('')+'</tbody>'}
+function renderAll(){renderKPIs();renderCharts();renderZoneTable();renderPoints();renderBatteries();renderGoJetPreview(state.gojet);renderMonitorPlan();if(document.querySelector('.tab.active')?.dataset.tab==='map')renderMap()}
+function showTab(id){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===id));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));if(id==='map')renderMap()}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>showTab(t.dataset.tab));
+function bindFileInput(inputId,handler,errorLabel){const input=$(inputId),drop=input.closest('.drop');const run=file=>{if(!file)return;input.value='';handler(file).catch(err=>toast(errorLabel+': '+err.message))};input.onchange=e=>run(e.target.files[0]);if(!drop)return;drop.tabIndex=0;drop.setAttribute('role','button');drop.onclick=e=>{if(e.target.closest('label')||e.target===input)return;input.click()};drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click()}};['dragenter','dragover'].forEach(name=>drop.addEventListener(name,e=>{e.preventDefault();e.stopPropagation();drop.classList.add('dragover')}));['dragleave','dragend'].forEach(name=>drop.addEventListener(name,e=>{e.preventDefault();e.stopPropagation();drop.classList.remove('dragover')}));drop.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();drop.classList.remove('dragover');run(e.dataTransfer.files[0])})}
+document.addEventListener('dragover',e=>{if(e.dataTransfer?.types?.includes('Files'))e.preventDefault()});
+document.addEventListener('drop',e=>{if(e.dataTransfer?.types?.includes('Files')&&!e.target.closest('.drop')){e.preventDefault();toast('Solte o arquivo em uma area de upload')}});
+bindFileInput('monitor-file',handleMonitor,'Erro CSV');
+bindFileInput('allpoints-file',handleAllPoints,'Erro pontos');
+bindFileInput('mov-file',handleMov,'Erro movimentos');
+bindFileInput('bat-file',handleBat,'Erro baterias');
+$('btn-gojet').onclick=buscarPontosGoJet;
+$('btn-generate-monitors').onclick=generateMonitorsFromPlan;
+['monitor-zone','monitor-sort','plan-weekday-dia','plan-weekday-noite','plan-weekday-ambos','plan-friday-dia','plan-friday-noite','plan-weekend'].forEach(id=>{const el=$(id);if(el)el.oninput=el.onchange=()=>{readMonitorPlan();save();renderMonitorPlan()}});
+$('search').oninput=renderPoints;$('type-filter').onchange=renderPoints;$('period-filter').onchange=renderPoints;
+$('clear-data').onclick=()=>{if(confirm('Limpar dados locais deste navegador?')){localStorage.removeItem(STORE_KEY);localStorage.removeItem(OLD_STORE_KEY);location.reload()}};
+$('export-json').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='dashboard-bh-data.json';a.click();URL.revokeObjectURL(a.href)};
+load();renderAll();
+</script>
+</body>
 </html>
