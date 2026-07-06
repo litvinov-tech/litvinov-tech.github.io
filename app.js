@@ -1010,8 +1010,8 @@
       parkingKey: normalizeSearch(parkingName || "No zone"),
       endName: endName || "",
       endKey: normalizeSearch(endName || ""),
-      zone: techZoneName(firstValue(row, ["Тех. зона начала", "Тех.зона начала", "Тарифная зона аренды"])),
-      endZone: techZoneName(firstValue(row, ["Тех. зона завершения", "Тех.зона завершения"])),
+      zone: techZoneList(firstValue(row, ["Тех. зона начала", "Тех.зона начала"])),
+      endZone: techZoneList(firstValue(row, ["Тех. зона завершения", "Тех.зона завершения"])),
       isParkingSignal: isUsableParking(rawParkingName) || Boolean(startCoords && pointInBh(startCoords)),
       needsNameResolution,
       scooter,
@@ -1043,8 +1043,8 @@
     if (!sel) return;
     const zones = new Set();
     (state.rides || []).forEach((ride) => {
-      if (ride.zone) zones.add(ride.zone);
-      if (ride.endZone) zones.add(ride.endZone);
+      zoneListOf(ride.zone).forEach((z) => zones.add(z));
+      zoneListOf(ride.endZone).forEach((z) => zones.add(z));
     });
     const current = cleanText(state.capacity?.zoneFilter || sel.value || "all");
     const sorted = [...zones].filter(Boolean).sort((a, b) => a.localeCompare(b));
@@ -2435,10 +2435,10 @@
     const zoneFilter = cleanText(state.capacity?.zoneFilter || "all");
     const zoneOn = zoneFilter && zoneFilter !== "all";
     recent.forEach((ride) => {
-      if (ride.isParkingSignal && isUsableParking(ride.parkingName) && (!zoneOn || ride.zone === zoneFilter)) {
+      if (ride.isParkingSignal && isUsableParking(ride.parkingName) && (!zoneOn || zoneListOf(ride.zone).includes(zoneFilter))) {
         addRentalCapacityEvent(groups, ride.weekday, ride.dateKey, ride.hour, ride.parkingName, ride.parkingKey, "start", ride);
       }
-      if (isUsableParking(ride.endName) && (!zoneOn || ride.endZone === zoneFilter)) {
+      if (isUsableParking(ride.endName) && (!zoneOn || zoneListOf(ride.endZone).includes(zoneFilter))) {
         const endMeta = rentalEndMeta(ride);
         addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, normalizeSearch(ride.endName), "end", ride);
       }
@@ -3686,11 +3686,18 @@
       .trim();
   }
 
-  // Tech zone from the rental export, e.g. "Curitiba Centro,Куритиба" -> "Curitiba Centro".
-  function techZoneName(value) {
+  // A rental cell can list several tech zones at once, e.g. "Zona 1, A2" means the
+  // parking belongs to BOTH "Zona 1" and "A2" (A1/A2 and Zona 1/2/3 are separate,
+  // overlapping layers). Split into a list of distinct zone tags.
+  function techZoneList(value) {
     const text = cleanText(value);
-    if (!text) return "";
-    return text.split(",")[0].trim();
+    if (!text) return [];
+    return [...new Set(text.split(",").map((z) => z.replace(/[✅]/g, "").trim()).filter(Boolean))];
+  }
+
+  function zoneListOf(value) {
+    if (Array.isArray(value)) return value;
+    return typeof value === "string" && value ? [value] : [];
   }
 
   function normalizeParkingName(value) {
