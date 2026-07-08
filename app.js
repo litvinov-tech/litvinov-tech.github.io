@@ -2582,13 +2582,14 @@
       const capsDay = [];
       const capsEvening = [];
       const winH = clamp(Number(state.settings.capacityWindow) || 12, 2, 12);
-      const dayStarts = Array.from({ length: 12 }, (_, hour) => hour);
-      const eveningStarts = Array.from({ length: 12 }, (_, hour) => hour + 12);
+      const dayHours = Array.from({ length: 12 }, (_, hour) => hour);
+      const eveningHours = Array.from({ length: 12 }, (_, hour) => hour + 12);
+      const allHours = Array.from({ length: 24 }, (_, hour) => hour);
       days.forEach((day) => {
         const matrix = item.days.get(day) || emptyRentalDayMatrix();
-        capsAll.push(rentalMaxDeficit(matrix, [0], 24));
-        capsDay.push(rentalMaxDeficit(matrix, dayStarts, winH));
-        capsEvening.push(rentalMaxDeficit(matrix, eveningStarts, winH));
+        capsAll.push(rentalMaxDeficit(matrix, allHours, 24));
+        capsDay.push(rentalMaxDeficit(matrix, dayHours, winH));
+        capsEvening.push(rentalMaxDeficit(matrix, eveningHours, winH));
       });
       const rawAll = Math.ceil(avg(capsAll));
       const rawDay = Math.ceil(avg(capsDay));
@@ -2625,13 +2626,19 @@
   // Peak cumulative net deficit (departures - arrivals) inside the worst winH-hour
   // window whose start is in startHours (hours wrap past midnight). Matches the
   // sliding-window method used by the reference dashboard.
-  function rentalMaxDeficit(matrix, startHours, winH = 12) {
+  // Peak cumulative net deficit (departures - arrivals) inside the worst window of
+  // length winH that fits ENTIRELY within the given block hours (no crossing into
+  // another block). With winH >= block length it's the whole block (default),
+  // which prevents a half-day block from inflating with the other half's demand.
+  function rentalMaxDeficit(matrix, hours, winH) {
+    const n = hours.length;
+    const w = Math.min(winH || n, n);
     let best = 0;
-    for (const start of startHours) {
+    for (let i = 0; i + w <= n; i += 1) {
       let cumulative = 0;
       let peak = 0;
-      for (let i = 0; i < winH; i += 1) {
-        const bucket = matrix[(start + i) % 24] || {};
+      for (let j = i; j < i + w; j += 1) {
+        const bucket = matrix[hours[j]] || {};
         cumulative += (bucket.dep || 0) - (bucket.arr || 0);
         if (cumulative > peak) peak = cumulative;
       }
