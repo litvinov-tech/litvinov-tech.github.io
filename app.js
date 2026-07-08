@@ -561,7 +561,7 @@
       try {
         const parsed = await parseRentalFile(file, existing);
         parsed.rides.forEach((ride) => existing.add(ride.id));
-        allNew.push(...parsed.rides);
+        for (const r of parsed.rides) allNew.push(r);
         uploadRows.push(parsed.upload);
         toast(`${file.name}: добавлено ${parsed.upload.newRides}, ${parsed.upload.cityName || activeCityName()} строк ${parsed.upload.cityRows}`);
       } catch (err) {
@@ -571,7 +571,7 @@
     }
 
     if (allNew.length || uploadRows.length) {
-      state.rides.push(...allNew);
+      for (const r of allNew) state.rides.push(r);
       state.uploads = [...uploadRows, ...state.uploads].sort((a, b) => b.importedAt - a.importedAt);
       recompute();
       setStatus("warn", `\u041f\u043e\u043a\u0430\u0437\u0430\u043d\u043e ${fmtInt(allNew.length)} \u00b7 \u0441\u0447\u0438\u0442\u0430\u044e capacity`);
@@ -1478,7 +1478,7 @@
       return;
     }
 
-    const maxScore = Math.max(...stations.map((station) => station.score), 1);
+    const maxScore = stations.reduce((m, station) => Math.max(m, station.score), 1);
     els.topTable.innerHTML = stations.map((station, index) => `
       <tr>
         <td class="rank">${index + 1}</td>
