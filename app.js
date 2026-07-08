@@ -2824,7 +2824,19 @@
       o.tw = Math.max(o.tw, r.targetWeekend || 0);
     };
     src.forEach(merge); wknd.forEach(merge);
+    // Mirror the build: cap every block at the teto for display too, so the
+    // preview never shows a number the exported CSV would not. Manual overrides
+    // may exceed the ceiling (operator's call).
+    const ceilRaw = state.settings?.capacityCeiling;
+    const ceiling = (ceilRaw == null || ceilRaw === "") ? Infinity : Math.max(0, Number(ceilRaw) || 0);
     let rows = [...byKey.values()].map((o) => {
+      const mc = manualCapFor(o.name);
+      const lim = (mc !== undefined) ? Infinity : ceiling;
+      if (Number.isFinite(lim)) {
+        o.td = Math.min(o.td, lim); o.te = Math.min(o.te, lim);
+        o.tfd = Math.min(o.tfd, lim); o.tfe = Math.min(o.tfe, lim);
+        o.tw = Math.min(o.tw, lim);
+      }
       const moon = Math.max(o.td, o.tfd), sun = Math.max(o.te, o.tfe);
       const cap = Math.max(moon, sun, o.tw);
       const ret = o.starts > 0 ? o.finishes / o.starts : 0;
