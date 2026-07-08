@@ -2823,7 +2823,7 @@
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
     const man = state.capacity?.manualCaps || {};
-    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th>🌙 00-12</th><th>☀ 12-00</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
+    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
     const body = rows.map((r, i) => {
       const t = CAP_TYPE_LABEL[r.zoneType] || "Баланс";
       const tc = t === "Источник" ? "src" : t === "Накопитель" ? "acc" : "bal";
@@ -2833,7 +2833,6 @@
         + `<td class="${r.balance < 0 ? "neg" : "pos"}">${r.balance > 0 ? "+" : ""}${r.balance.toFixed(1)}</td>`
         + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(r.cap)}</td>`
         + `<td><input class="capman" type="number" min="0" step="1" inputmode="numeric" data-key="${esc(r.key)}" value="${hasMan ? mv : ""}" placeholder="авто"></td>`
-        + `<td>${fmtInt(r.moon)}</td><td>${fmtInt(r.sun)}</td>`
         + `<td class="l blocks">${esc(r.blocks)}</td><td><span class="ztype ${tc}">${t}</span></td></tr>`;
     }).join("");
     els.capacityPreview.innerHTML = `<div class="preview-table-wrap"><table class="preview-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;

@@ -2295,9 +2295,13 @@ button:disabled,
 .preview-sort{display:flex;gap:6px}
 .preview-sort button{padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-weight:700;cursor:pointer;font-size:12px}
 .preview-sort button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
-.preview-table-wrap{width:100%;max-width:100%;overflow-x:auto;max-height:560px;overflow-y:auto;border:1px solid var(--line);border-radius:8px}
-.capacity-preview{max-width:100%;overflow:hidden}
-.preview-table{border-collapse:collapse;width:100%;min-width:900px;font-size:12.5px}
+.capacity-preview{max-width:100%;min-width:0;overflow:hidden}
+/* Hard viewport cap: ancestors use overflow:visible, so bound the scroll box
+   to the viewport minus the control panel — a wide table then scrolls inside
+   instead of stretching the layout off-screen. */
+.preview-table-wrap{width:100%;max-width:calc(100vw - 400px);overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:8px}
+@media (max-width:1180px){.preview-table-wrap{max-width:calc(100vw - 40px)}}
+.preview-table{border-collapse:collapse;width:100%;min-width:720px;font-size:12.5px}
 .preview-table th,.preview-table td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
 .preview-table th.l,.preview-table td.l{text-align:left}
 .preview-table thead th{position:sticky;top:0;background:var(--panel-soft);color:var(--muted);font-weight:800;cursor:default}
