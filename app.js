@@ -2846,7 +2846,7 @@
   // Preview of what will go into the monitor: one row per parking with starts/
   // finishes/balance/return%, overall capacity, day/evening capacity, block
   // breakdown and type. Mirrors the competitor's ranking view.
-  let capPreviewSort = "cap";
+  let capPreviewSort = "priority";
   let capPreviewSearch = "";
   const CAP_TYPE_LABEL = { "стартовая": "Источник", "финишная": "Накопитель", "ровная": "Баланс" };
 
@@ -2889,11 +2889,16 @@
         (o.tfd || o.tfe) ? `Пт ${o.tfd}/${o.tfe}` : "",
         o.tw ? `Вых ${o.tw}` : "",
       ].filter(Boolean).join(" · ");
-      return { ...o, cap, moon, sun, ret, balance: o.finishes - o.starts, blocks };
+      // Fill priority: demand that leaves and is NOT replenished on-site.
+      // High starts + low return => empties fast => must stay full. Accumulators
+      // (return >= 1) score 0 — they refill themselves.
+      const retC = Math.max(0, Math.min(1, ret));
+      const pri = o.starts * (1 - retC);
+      return { ...o, cap, moon, sun, ret, balance: o.finishes - o.starts, blocks, pri };
     });
     const f = (capPreviewSearch || "").toLowerCase();
     if (f) rows = rows.filter((r) => (r.name || "").toLowerCase().includes(f) || (r.blocks || "").toLowerCase().includes(f));
-    const cmp = { cap: (a, b) => b.cap - a.cap, starts: (a, b) => b.starts - a.starts, balance: (a, b) => a.balance - b.balance };
+    const cmp = { priority: (a, b) => b.pri - a.pri, cap: (a, b) => b.cap - a.cap, starts: (a, b) => b.starts - a.starts, balance: (a, b) => a.balance - b.balance };
     rows.sort(cmp[capPreviewSort] || cmp.cap);
 
     if (els.capacityPreviewInfo) {
@@ -2905,16 +2910,20 @@
       els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок`;
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
-    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
+    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Что делать: 🔴 держать полной (источник, высокий спрос) · 🟡 частично · 🟢 не пополнять (накопитель)">🎯</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
     const body = rows.map((r, i) => {
       const t = CAP_TYPE_LABEL[r.zoneType] || "Баланс";
       const tc = t === "Источник" ? "src" : t === "Накопитель" ? "acc" : "bal";
       const mv = manualCapFor(r.name);
       const hasMan = mv !== undefined;
       const shownCap = hasMan ? mv : r.cap;
+      let rec = "🟡 50%", recCls = "rec-mid";
+      if (r.balance < -0.5) { rec = "🔴 100%"; recCls = "rec-fill"; }
+      else if (r.balance > 0.5) { rec = "🟢 0%"; recCls = "rec-no"; }
       return `<tr${hasMan ? ' class="man-row"' : ""}><td>${i + 1}</td><td class="l">${esc(r.name)}</td><td>${r.starts.toFixed(1)}</td><td>${r.finishes.toFixed(1)}</td>`
         + `<td class="${r.balance < 0 ? "neg" : "pos"}">${r.balance > 0 ? "+" : ""}${r.balance.toFixed(1)}</td>`
         + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(shownCap)}</td>`
+        + `<td><span class="rec ${recCls}">${rec}</span></td>`
         + `<td><input class="capman" type="number" min="0" step="1" inputmode="numeric" data-key="${esc(capacityNameKey(r.name))}" value="${hasMan ? mv : ""}" placeholder="авто"></td>`
         + `<td class="l blocks">${esc(r.blocks)}</td><td><span class="ztype ${tc}">${t}</span></td></tr>`;
     }).join("");
