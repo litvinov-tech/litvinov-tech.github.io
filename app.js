@@ -2422,9 +2422,31 @@
     const latestTs = usable.reduce((max, ride) => Math.max(max, ride.ts || 0), 0);
     const cutoffTs = latestTs ? latestTs - state.settings.lookbackDays * 86400000 : 0;
     const resolver = buildParkingResolver(usable);
+    // Snap every ride's start/end to the nearest real GoJet parking of the selected
+    // city. Rental zone names are inconsistent (one spot has several names), which
+    // split departures/arrivals into different "parkings" and inflated capacity.
+    // Keying by the catalog parking id lets flows at the same spot net out.
+    const catPoints = (state.capacity?.allParkings || [])
+      .filter((p) => p.id && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)))
+      .map((p) => ({ name: p.name, key: `id:${p.id}`, lat: Number(p.lat), lng: Number(p.lng), id: p.id }));
+    const catResolver = catPoints.length ? buildResolverIndex(catPoints) : null;
+    const CATALOG_SNAP_M = 60;
+    const snapToCatalog = (ride) => {
+      if (!catResolver) return ride;
+      const out = { ...ride };
+      if (ride.startLat != null && ride.startLng != null) {
+        const n = nearestParkingPoint(Number(ride.startLat), Number(ride.startLng), catResolver);
+        if (n && n.distanceM <= CATALOG_SNAP_M) { out.parkingName = n.name; out.parkingKey = n.key; out.catalogId = n.id; out.isParkingSignal = true; }
+      }
+      if (ride.endLat != null && ride.endLng != null) {
+        const n = nearestParkingPoint(Number(ride.endLat), Number(ride.endLng), catResolver);
+        if (n && n.distanceM <= CATALOG_SNAP_M) { out.endName = n.name; out.endKey = n.key; out.endCatalogId = n.id; }
+      }
+      return out;
+    };
     const recent = usable
       .filter((ride) => !cutoffTs || ride.ts >= cutoffTs)
-      .map((ride) => resolveRideEndParking(resolveRideParking(ride, resolver), resolver));
+      .map((ride) => snapToCatalog(resolveRideEndParking(resolveRideParking(ride, resolver), resolver)));
 
     const groups = {
       weekday: createRentalCapacityGroup("\u0411\u0443\u0434\u043d\u0438"),
@@ -2442,7 +2464,7 @@
       }
       if (isUsableParking(ride.endName) && (!zoneOn || inZone(ride.endZone))) {
         const endMeta = rentalEndMeta(ride);
-        addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, normalizeSearch(ride.endName), "end", ride);
+        addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, ride.endKey || normalizeSearch(ride.endName), "end", ride);
       }
     });
 
