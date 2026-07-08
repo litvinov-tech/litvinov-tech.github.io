@@ -181,6 +181,7 @@
       "capacityExportBtn", "monitorUpdateExportBtn", "capacityStatusText", "capacityKpiSource", "capacityKpiMatched",
       "capacityKpiMissing", "capacityKpiProblems", "capacityKpiGenerated", "capacityMissingList", "capacityMismatchTable",
       "rentalAutoCapacityBtn", "autoCapacitySummary", "monitorSuggestionList",
+      "capacityPreview", "capacityPreviewInfo", "capacityPreviewSearch", "capacityPreviewSort",
     ].forEach((id) => {
       els[id] = document.getElementById(id);
     });
@@ -293,6 +294,14 @@
       if (els.capacityWindowValue) els.capacityWindowValue.textContent = state.settings.capacityWindow;
       persistSettingsSoon();
       rebuildRentalCapacityRows();
+    });
+    els.capacityPreviewSearch?.addEventListener("input", (e) => { capPreviewSearch = e.target.value; renderCapacityPreview(); });
+    els.capacityPreviewSort?.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-sort]");
+      if (!b) return;
+      capPreviewSort = b.dataset.sort;
+      els.capacityPreviewSort.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      renderCapacityPreview();
     });
     els.appsScriptLoginBtn?.addEventListener("click", loginAppsScriptBridge);
 
@@ -2716,6 +2725,68 @@
     `).join("");
   }
 
+  // Preview of what will go into the monitor: one row per parking with starts/
+  // finishes/balance/return%, overall capacity, day/evening capacity, block
+  // breakdown and type. Mirrors the competitor's ranking view.
+  let capPreviewSort = "cap";
+  let capPreviewSearch = "";
+  const CAP_TYPE_LABEL = { "стартовая": "Источник", "финишная": "Накопитель", "ровная": "Баланс" };
+
+  function renderCapacityPreview() {
+    if (!els.capacityPreview) return;
+    const src = state.capacity?.sourceRows || [];
+    const wknd = state.capacity?.weekendRows || [];
+    const byKey = new Map();
+    const merge = (r) => {
+      const k = r.key || capacityNameKey(r.name);
+      if (!byKey.has(k)) byKey.set(k, { name: r.name, starts: 0, finishes: 0, zoneType: r.zoneType || "", td: 0, te: 0, tfd: 0, tfe: 0, tw: 0 });
+      const o = byKey.get(k);
+      const s = parseFloat(r.startsPerDay) || 0, f = parseFloat(r.finishesPerDay) || 0;
+      if (s > o.starts) o.starts = s;
+      if (f > o.finishes) o.finishes = f;
+      if (r.zoneType && !o.zoneType) o.zoneType = r.zoneType;
+      o.td = Math.max(o.td, r.targetDay || 0); o.te = Math.max(o.te, r.targetEvening || 0);
+      o.tfd = Math.max(o.tfd, r.targetFridayDay || 0); o.tfe = Math.max(o.tfe, r.targetFridayEvening || 0);
+      o.tw = Math.max(o.tw, r.targetWeekend || 0);
+    };
+    src.forEach(merge); wknd.forEach(merge);
+    let rows = [...byKey.values()].map((o) => {
+      const moon = Math.max(o.td, o.tfd), sun = Math.max(o.te, o.tfe);
+      const cap = Math.max(moon, sun, o.tw);
+      const ret = o.starts > 0 ? o.finishes / o.starts : 0;
+      const blocks = [
+        (o.td || o.te) ? `Будни ${o.td}/${o.te}` : "",
+        (o.tfd || o.tfe) ? `Пт ${o.tfd}/${o.tfe}` : "",
+        o.tw ? `Вых ${o.tw}` : "",
+      ].filter(Boolean).join(" · ");
+      return { ...o, cap, moon, sun, ret, balance: o.starts - o.finishes, blocks };
+    });
+    const f = (capPreviewSearch || "").toLowerCase();
+    if (f) rows = rows.filter((r) => (r.name || "").toLowerCase().includes(f) || (r.blocks || "").toLowerCase().includes(f));
+    const cmp = { cap: (a, b) => b.cap - a.cap, starts: (a, b) => b.starts - a.starts, balance: (a, b) => a.balance - b.balance };
+    rows.sort(cmp[capPreviewSort] || cmp.cap);
+
+    if (els.capacityPreviewInfo) {
+      const city = selectedCapacityCity();
+      const cityRides = (state.rides || []).filter((r) => sameCity(r.city));
+      const ts = cityRides.map((r) => r.ts).filter(Boolean).sort((a, b) => a - b);
+      const days = new Set(cityRides.map((r) => r.dateKey)).size;
+      const per = ts.length ? `${new Date(ts[0]).toLocaleDateString("pt-BR")} – ${new Date(ts[ts.length - 1]).toLocaleDateString("pt-BR")}` : "—";
+      els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок`;
+    }
+    if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
+    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th>🌙 00-12</th><th>☀ 12-00</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
+    const body = rows.map((r, i) => {
+      const t = CAP_TYPE_LABEL[r.zoneType] || "Баланс";
+      const tc = t === "Источник" ? "src" : t === "Накопитель" ? "acc" : "bal";
+      return `<tr><td>${i + 1}</td><td class="l">${esc(r.name)}</td><td>${r.starts.toFixed(1)}</td><td>${r.finishes.toFixed(1)}</td>`
+        + `<td class="${r.balance < 0 ? "neg" : "pos"}">${r.balance > 0 ? "+" : ""}${r.balance.toFixed(1)}</td>`
+        + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(r.cap)}</td><td>${fmtInt(r.moon)}</td><td>${fmtInt(r.sun)}</td>`
+        + `<td class="l blocks">${esc(r.blocks)}</td><td><span class="ztype ${tc}">${t}</span></td></tr>`;
+    }).join("");
+    els.capacityPreview.innerHTML = `<div class="preview-table-wrap"><table class="preview-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  }
+
   async function importCapacityCsv(file) {
     try {
       const text = await file.text();
@@ -3047,6 +3118,7 @@
 
   function renderCapacityCompare() {
     if (!els.capacityStatusText) return;
+    renderCapacityPreview();
     const cmp = state.capacity?.comparison || emptyCapacityComparison(getMonitorCapacityRows());
     const sourceRows = state.capacity?.sourceRows || [];
     const generated = state.capacity?.generated;

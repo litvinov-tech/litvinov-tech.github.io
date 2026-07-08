@@ -2282,3 +2282,28 @@ button:disabled,
     order: -1;
   }
 }
+
+/* Capacity preview (o que vai para o monitor) — uses site theme variables */
+.capacity-preview{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--panel-soft)}
+.capacity-preview .preview-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.capacity-preview .preview-head h3{margin:0;font-size:14px}
+.capacity-preview .preview-info{color:var(--brand);font-size:12px;font-weight:800}
+.preview-tools{display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap}
+.preview-tools input{flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.preview-sort{display:flex;gap:6px}
+.preview-sort button{padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-weight:700;cursor:pointer;font-size:12px}
+.preview-sort button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.preview-table-wrap{overflow-x:auto;max-height:560px;overflow-y:auto;border:1px solid var(--line);border-radius:8px}
+.preview-table{border-collapse:collapse;width:100%;min-width:820px;font-size:12.5px}
+.preview-table th,.preview-table td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.preview-table th.l,.preview-table td.l{text-align:left}
+.preview-table thead th{position:sticky;top:0;background:var(--panel-soft);color:var(--muted);font-weight:800;cursor:default}
+.preview-table td.cap{font-weight:900;color:var(--brand)}
+.preview-table td.neg{color:var(--red)} .preview-table td.pos{color:var(--green)}
+.preview-table td.blocks{color:var(--muted);font-size:11.5px}
+.preview-table tbody tr:hover{background:rgba(0,168,132,.06)}
+.ztype{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800}
+.ztype.src{background:rgba(194,65,12,.14);color:var(--red)}
+.ztype.acc{background:rgba(21,128,61,.14);color:var(--green)}
+.ztype.bal{background:rgba(217,119,6,.16);color:var(--amber)}
+.preview-empty{color:var(--muted);padding:16px;text-align:center}

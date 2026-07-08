@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JET Capacity Brain</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260706-9">
+    <link rel="stylesheet" href="./styles.css?v=20260708-5">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="./app.js?v=20260708-4" defer></script>
+    <script src="./app.js?v=20260708-5" defer></script>
     <script src="./i18n.js?v=20260706-4" defer></script>
   </head>
   <body>
@@ -494,6 +494,21 @@
               <div><strong id="capacityKpiMissing">0</strong><span>&#1085;&#1077;&#1090; &#1074; monitor</span></div>
               <div><strong id="capacityKpiProblems">0</strong><span>&#1087;&#1088;&#1072;&#1074;&#1082;&#1080; capacity</span></div>
               <div><strong id="capacityKpiGenerated">0</strong><span>&#1089;&#1090;&#1088;&#1086;&#1082; &#1074; &#1085;&#1086;&#1074;&#1086;&#1084; CSV</span></div>
+            </div>
+            <div class="capacity-preview" id="capacityPreviewPanel">
+              <div class="preview-head">
+                <h3>Previsão — o que vai para o monitor</h3>
+                <span id="capacityPreviewInfo" class="preview-info"></span>
+              </div>
+              <div class="preview-tools">
+                <input id="capacityPreviewSearch" type="text" placeholder="Buscar parking / bloco…">
+                <div class="preview-sort" id="capacityPreviewSort">
+                  <button type="button" data-sort="cap" class="active">Por capacity</button>
+                  <button type="button" data-sort="starts">Por starts</button>
+                  <button type="button" data-sort="balance">Por balanço</button>
+                </div>
+              </div>
+              <div id="capacityPreview" class="preview-wrap"></div>
             </div>
             <div class="capacity-grid">
               <div>
