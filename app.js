@@ -9,6 +9,39 @@
   const STORE_META = "meta";
   const SETTINGS_KEY = "settings";
   const BH_BOUNDS = { minLat: -20.0231, maxLat: -19.8637, minLng: -44.0366, maxLng: -43.8691 };
+  // Coordinate-only (GPS report) rentals from the ClickHouse export cover all of Brazil,
+  // so acceptance is a country-wide box and each ride is labelled by the nearest city.
+  const BRAZIL_BOUNDS = { minLat: -34.0, maxLat: 6.0, minLng: -74.5, maxLng: -33.0 };
+  const BR_CITIES = [
+    { n: "Belo Horizonte", lat: -19.92, lng: -43.94 }, { n: "São Paulo", lat: -23.55, lng: -46.63 },
+    { n: "Campinas", lat: -22.90, lng: -47.06 }, { n: "Jundiaí", lat: -23.19, lng: -46.88 },
+    { n: "Santos", lat: -23.96, lng: -46.33 }, { n: "Caraguatatuba", lat: -23.62, lng: -45.41 },
+    { n: "Curitiba", lat: -25.43, lng: -49.27 }, { n: "Londrina", lat: -23.31, lng: -51.16 },
+    { n: "Maringá", lat: -23.42, lng: -51.94 }, { n: "Ponta Grossa", lat: -25.09, lng: -50.16 },
+    { n: "Belém", lat: -1.46, lng: -48.49 }, { n: "Salvador", lat: -12.97, lng: -38.51 },
+    { n: "Ilhéus", lat: -14.79, lng: -39.03 }, { n: "Feira de Santana", lat: -12.27, lng: -38.97 },
+    { n: "Porto Alegre", lat: -30.03, lng: -51.23 }, { n: "Natal", lat: -5.79, lng: -35.21 },
+    { n: "Fortaleza", lat: -3.73, lng: -38.52 }, { n: "Aracaju", lat: -10.95, lng: -37.07 },
+    { n: "Recife", lat: -8.05, lng: -34.88 }, { n: "Maceió", lat: -9.67, lng: -35.74 },
+    { n: "Brasília", lat: -15.79, lng: -47.88 }, { n: "Vitória", lat: -20.32, lng: -40.34 },
+    { n: "Itajaí", lat: -26.91, lng: -48.66 }, { n: "Balneário Camboriú", lat: -26.99, lng: -48.63 },
+    { n: "Florianópolis", lat: -27.60, lng: -48.55 }, { n: "Campo Grande", lat: -20.46, lng: -54.62 },
+  ];
+  function pointInBrazil(point) {
+    return Boolean(point
+      && point.lat >= BRAZIL_BOUNDS.minLat && point.lat <= BRAZIL_BOUNDS.maxLat
+      && point.lng >= BRAZIL_BOUNDS.minLng && point.lng <= BRAZIL_BOUNDS.maxLng);
+  }
+  function brazilCityForPoint(point) {
+    if (!point) return "";
+    let best = null, bestM = Infinity;
+    for (const c of BR_CITIES) {
+      const d = haversineMeters(point.lat, point.lng, c.lat, c.lng);
+      if (d < bestM) { bestM = d; best = c; }
+    }
+    if (best && bestM <= 80000) return best.n;
+    return `BR ${point.lat.toFixed(1)}, ${point.lng.toFixed(1)}`;
+  }
   const PARKING_MATCH_RADIUS_M = 90;
   const RESOLVER_CELL_DEG = 0.001;
   const RESOLVER_CELL_RANGE = 2;
@@ -602,6 +635,17 @@
       rides.push(ride);
     });
 
+    // A coordinate-only file spans many cities: register every city found and land
+    // the operator on the busiest one so data shows up immediately after import.
+    const cityCounts = new Map();
+    rides.forEach((r) => { if (r.city) cityCounts.set(r.city, (cityCounts.get(r.city) || 0) + 1); });
+    if (cityCounts.size > 1) {
+      cityCounts.forEach((_cnt, name) => ensureCapacityCityOption(name));
+      let topCity = importCity.name, topN = -1;
+      cityCounts.forEach((cnt, name) => { if (cnt > topN) { topN = cnt; topCity = name; } });
+      setSelectedCapacityCity(ensureCapacityCityOption(topCity), { clearLoaded: false });
+    }
+
     const importedAt = Date.now();
     const upload = {
       id: `${importedAt}-${hashText(file.name)}-${Math.random().toString(16).slice(2)}`,
@@ -637,13 +681,13 @@
   function isGpsReportRow(row) {
     const start = coordsFromLatLng(row["Start_Latitude"], row["Start_Longitude"]);
     const end = coordsFromLatLng(row["End_Latitude"], row["End_Longitude"]);
-    return Boolean(row["OrderId"] && row["QR"] && row["\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043c\u044f \u0441\u0442\u0430\u0440\u0442\u0430"] && start && end && (pointInBh(start) || pointInBh(end)));
+    return Boolean(row["OrderId"] && row["QR"] && row["\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043c\u044f \u0441\u0442\u0430\u0440\u0442\u0430"] && start && end && (pointInBrazil(start) || pointInBrazil(end)));
   }
 
   function extractGpsReportRide(row, fileName, rowNumber, fallbackCity = activeCityName()) {
     const startCoords = coordsFromLatLng(row["Start_Latitude"], row["Start_Longitude"]);
     const endCoords = coordsFromLatLng(row["End_Latitude"], row["End_Longitude"]);
-    if (!startCoords || !endCoords || (!pointInBh(startCoords) && !pointInBh(endCoords))) return null;
+    if (!startCoords || !endCoords || (!pointInBrazil(startCoords) && !pointInBrazil(endCoords))) return null;
 
     const startAt = parseReportDateTime(row["\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043c\u044f \u0441\u0442\u0430\u0440\u0442\u0430"]);
     if (!startAt) return null;
@@ -656,7 +700,7 @@
 
     return {
       id: idRaw || `gps-${fallbackId}`,
-      city: fallbackCity || activeCityName(),
+      city: brazilCityForPoint(startCoords) || brazilCityForPoint(endCoords) || fallbackCity || activeCityName(),
       fileName,
       rowNumber,
       sourceType: "gps-report",
