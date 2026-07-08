@@ -2290,11 +2290,14 @@ button:disabled,
 .capacity-preview .preview-info{color:var(--brand);font-size:12px;font-weight:800}
 .preview-tools{display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap}
 .preview-tools input{flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.preview-hint{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.45}
+.preview-hint b{color:var(--brand)}
 .preview-sort{display:flex;gap:6px}
 .preview-sort button{padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-weight:700;cursor:pointer;font-size:12px}
 .preview-sort button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
-.preview-table-wrap{overflow-x:auto;max-height:560px;overflow-y:auto;border:1px solid var(--line);border-radius:8px}
-.preview-table{border-collapse:collapse;width:100%;min-width:820px;font-size:12.5px}
+.preview-table-wrap{width:100%;max-width:100%;overflow-x:auto;max-height:560px;overflow-y:auto;border:1px solid var(--line);border-radius:8px}
+.capacity-preview{max-width:100%;overflow:hidden}
+.preview-table{border-collapse:collapse;width:100%;min-width:900px;font-size:12.5px}
 .preview-table th,.preview-table td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
 .preview-table th.l,.preview-table td.l{text-align:left}
 .preview-table thead th{position:sticky;top:0;background:var(--panel-soft);color:var(--muted);font-weight:800;cursor:default}
@@ -2306,4 +2309,10 @@ button:disabled,
 .ztype.src{background:rgba(194,65,12,.14);color:var(--red)}
 .ztype.acc{background:rgba(21,128,61,.14);color:var(--green)}
 .ztype.bal{background:rgba(217,119,6,.16);color:var(--amber)}
+.capman{width:64px;padding:4px 6px;text-align:right;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:12.5px;font-weight:700}
+.capman:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 2px rgba(0,168,132,.18)}
+.capman::placeholder{color:var(--muted);font-weight:400}
+.preview-table tr.man-row{background:rgba(0,168,132,.09)}
+.preview-table tr.man-row td.cap{color:var(--brand)}
+.preview-table tr.man-row .capman{border-color:var(--brand);color:var(--brand)}
 .preview-empty{color:var(--muted);padding:16px;text-align:center}

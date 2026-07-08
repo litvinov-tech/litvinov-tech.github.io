@@ -117,8 +117,20 @@
       allParkingsSource: "",
       monitorRulesSource: "",
       autoRental: null,
+      manualCaps: loadManualCaps(),
     },
   };
+
+  // Manual capacity overrides per parking (name-key -> capacity). Persisted so
+  // they survive reloads; applied in buildRentalCapacityRows and the export.
+  function loadManualCaps() {
+    try { return JSON.parse(localStorage.getItem("capacityManualCaps") || "{}") || {}; }
+    catch (e) { return {}; }
+  }
+  function saveManualCaps() {
+    try { localStorage.setItem("capacityManualCaps", JSON.stringify(state.capacity.manualCaps || {})); }
+    catch (e) {}
+  }
 
   const monthMap = new Map([
     ["янв", 0], ["январ", 0],
@@ -302,6 +314,25 @@
       capPreviewSort = b.dataset.sort;
       els.capacityPreviewSort.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
       renderCapacityPreview();
+    });
+    // Manual capacity override typed straight into the preview table.
+    els.capacityPreview?.addEventListener("change", (e) => {
+      const inp = e.target.closest("input.capman");
+      if (!inp) return;
+      const key = inp.dataset.key;
+      if (!key) return;
+      state.capacity.manualCaps = state.capacity.manualCaps || {};
+      const raw = inp.value.trim();
+      if (raw === "") {
+        delete state.capacity.manualCaps[key];
+      } else {
+        const v = Math.max(0, Math.round(Number(raw)));
+        if (!Number.isFinite(v)) { inp.value = ""; return; }
+        state.capacity.manualCaps[key] = v;
+      }
+      saveManualCaps();
+      rebuildRentalCapacityRows();
+      toast(raw === "" ? "Ручной capacity снят" : `Ручной capacity: ${Math.max(0, Math.round(Number(raw)))}`);
     });
     els.appsScriptLoginBtn?.addEventListener("click", loginAppsScriptBridge);
 
@@ -2423,7 +2454,7 @@
       .sort((a, b) => ((Number(b[field]) || 0) - (Number(a[field]) || 0))
         || (periodStarts(b, period) - periodStarts(a, period)));
     const keep = new Set(ranked.slice(0, limit).map((row) => row.key));
-    rows.forEach((row) => { if (!keep.has(row.key)) row[field] = 0; });
+    rows.forEach((row) => { if (row.manual) return; if (!keep.has(row.key)) row[field] = 0; });
   }
 
   function buildRentalCapacityRows(rides) {
@@ -2502,22 +2533,38 @@
       weekendRowsRaw.forEach((row) => { const w = wkAll.get(row.key); if (w != null && (row.targetWeekend || 0) > w) row.targetWeekend = w; });
     }
 
+    // Manual overrides: a capacity typed by hand wins over the computed value.
+    // It is applied to every block of that parking and marked so Top-N and the
+    // >=2 threshold never drop it \u2014 the operator decided this number goes to the
+    // monitor.
+    const manual = state.capacity?.manualCaps || {};
+    const applyManual = (row) => {
+      const v = manual[row.key];
+      if (!Number.isFinite(v) || v < 0) return;
+      row.manual = true;
+      row.targetDay = row.targetEvening = v;
+      row.targetFridayDay = row.targetFridayEvening = v;
+      row.targetWeekend = v;
+    };
+    merged.forEach(applyManual);
+    weekendRowsRaw.forEach((row) => { const v = manual[row.key]; if (Number.isFinite(v) && v >= 0) { row.manual = true; row.targetWeekend = v; } });
+
     // Independent Top-N per period: each period keeps its own strongest parkings by
     // its own demand. The same parking can qualify in several periods at once
     // (e.g. sexta noite \u0438 \u0431\u0443\u0434\u043d\u0438), depending on rental starts/returns in each period.
     const candidates = [...merged.values()];
     ["weekdayDay", "weekdayEvening", "fridayDay", "fridayEvening"].forEach((period) => applyPeriodTopN(candidates, period));
     const sourceRows = candidates
-      .filter((row) => Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0) >= 2)
+      .filter((row) => row.manual || Math.max(row.targetDay || 0, row.targetEvening || 0, row.targetFridayDay || 0, row.targetFridayEvening || 0) >= 2)
       .sort((a, b) => Math.max(b.targetDay || 0, b.targetEvening || 0, b.targetFridayDay || 0, b.targetFridayEvening || 0) - Math.max(a.targetDay || 0, a.targetEvening || 0, a.targetFridayDay || 0, a.targetFridayEvening || 0))
       .map((row, index) => ({ ...row, rank: index + 1 }));
 
     const weekendCandidates = weekendRowsRaw
-      .filter((row) => row.targetWeekend >= 2)
+      .filter((row) => row.manual || row.targetWeekend >= 2)
       .map((row) => ({ ...row, blockSummary: `\u0412\u044b\u0445\u043e\u0434\u043d\u044b\u0435 ${row.targetWeekend}` }));
     applyPeriodTopN(weekendCandidates, "weekend");
     const weekendRows = weekendCandidates
-      .filter((row) => (row.targetWeekend || 0) >= 2)
+      .filter((row) => row.manual || (row.targetWeekend || 0) >= 2)
       .sort((a, b) => (b.targetWeekend || 0) - (a.targetWeekend || 0))
       .map((row, index) => ({ ...row, rank: index + 1 }));
 
@@ -2739,7 +2786,7 @@
     const byKey = new Map();
     const merge = (r) => {
       const k = r.key || capacityNameKey(r.name);
-      if (!byKey.has(k)) byKey.set(k, { name: r.name, starts: 0, finishes: 0, zoneType: r.zoneType || "", td: 0, te: 0, tfd: 0, tfe: 0, tw: 0 });
+      if (!byKey.has(k)) byKey.set(k, { key: k, name: r.name, starts: 0, finishes: 0, zoneType: r.zoneType || "", td: 0, te: 0, tfd: 0, tfe: 0, tw: 0 });
       const o = byKey.get(k);
       const s = parseFloat(r.startsPerDay) || 0, f = parseFloat(r.finishesPerDay) || 0;
       if (s > o.starts) o.starts = s;
@@ -2759,7 +2806,7 @@
         (o.tfd || o.tfe) ? `Пт ${o.tfd}/${o.tfe}` : "",
         o.tw ? `Вых ${o.tw}` : "",
       ].filter(Boolean).join(" · ");
-      return { ...o, cap, moon, sun, ret, balance: o.starts - o.finishes, blocks };
+      return { ...o, cap, moon, sun, ret, balance: o.finishes - o.starts, blocks };
     });
     const f = (capPreviewSearch || "").toLowerCase();
     if (f) rows = rows.filter((r) => (r.name || "").toLowerCase().includes(f) || (r.blocks || "").toLowerCase().includes(f));
@@ -2775,13 +2822,18 @@
       els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок`;
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
-    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th>🌙 00-12</th><th>☀ 12-00</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
+    const man = state.capacity?.manualCaps || {};
+    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th>🌙 00-12</th><th>☀ 12-00</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
     const body = rows.map((r, i) => {
       const t = CAP_TYPE_LABEL[r.zoneType] || "Баланс";
       const tc = t === "Источник" ? "src" : t === "Накопитель" ? "acc" : "bal";
-      return `<tr><td>${i + 1}</td><td class="l">${esc(r.name)}</td><td>${r.starts.toFixed(1)}</td><td>${r.finishes.toFixed(1)}</td>`
+      const mv = man[r.key];
+      const hasMan = Number.isFinite(mv) && mv >= 0;
+      return `<tr${hasMan ? ' class="man-row"' : ""}><td>${i + 1}</td><td class="l">${esc(r.name)}</td><td>${r.starts.toFixed(1)}</td><td>${r.finishes.toFixed(1)}</td>`
         + `<td class="${r.balance < 0 ? "neg" : "pos"}">${r.balance > 0 ? "+" : ""}${r.balance.toFixed(1)}</td>`
-        + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(r.cap)}</td><td>${fmtInt(r.moon)}</td><td>${fmtInt(r.sun)}</td>`
+        + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(r.cap)}</td>`
+        + `<td><input class="capman" type="number" min="0" step="1" inputmode="numeric" data-key="${esc(r.key)}" value="${hasMan ? mv : ""}" placeholder="авто"></td>`
+        + `<td>${fmtInt(r.moon)}</td><td>${fmtInt(r.sun)}</td>`
         + `<td class="l blocks">${esc(r.blocks)}</td><td><span class="ztype ${tc}">${t}</span></td></tr>`;
     }).join("");
     els.capacityPreview.innerHTML = `<div class="preview-table-wrap"><table class="preview-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
