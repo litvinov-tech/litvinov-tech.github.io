@@ -2335,6 +2335,14 @@
     }
     try {
       setStatus("warn", "JET Brain: \u0441\u0447\u0438\u0442\u0430\u044e capacity \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0430\u043c");
+      // Load the city catalog FIRST so rides snap to real GoJet parkings during the
+      // capacity build (otherwise flows fragment by name and capacity inflates).
+      if (!state.capacity.allParkings.length || state.capacity.allParkings.some((point) => !point.id)) {
+        await loadSelectedCityParkings();
+      }
+      if (!state.capacity.monitorRows.length) {
+        await loadSelectedCityMonitorRules();
+      }
       const built = buildRentalCapacityRows(state.rides);
       if (!built.sourceRows.length && !built.weekendRows.length) {
         toast("\u0412 \u0430\u0440\u0435\u043d\u0434\u0430\u0445 \u043d\u0435 \u043d\u0430\u0448\u0435\u043b \u043f\u0430\u0440\u043a\u043e\u0432\u043a\u0438 \u0441 capacity 2+", true);
@@ -2347,14 +2355,6 @@
       state.capacity.sourceFileName = "auto: rentals weekday/friday";
       state.capacity.weekendFileName = "auto: rentals weekend";
       state.capacity.autoRental = built.summary;
-      renderAutoCapacitySummary();
-
-      if (!state.capacity.allParkings.length || state.capacity.allParkings.some((point) => !point.id)) {
-        await loadSelectedCityParkings();
-      }
-      if (!state.capacity.monitorRows.length) {
-        await loadSelectedCityMonitorRules();
-      }
       recomputeCapacityCompare();
       renderCapacityCompare();
       renderAutoCapacitySummary();
