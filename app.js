@@ -2543,7 +2543,7 @@
       }
       if (isUsableParking(ride.endName) && (!zoneOn || inZone(ride.endZone))) {
         const endMeta = rentalEndMeta(ride);
-        addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, normalizeSearch(ride.endName), "end", ride);
+        addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, ride.endKey || normalizeSearch(ride.endName), "end", ride);
       }
     });
 
