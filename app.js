@@ -2422,31 +2422,9 @@
     const latestTs = usable.reduce((max, ride) => Math.max(max, ride.ts || 0), 0);
     const cutoffTs = latestTs ? latestTs - state.settings.lookbackDays * 86400000 : 0;
     const resolver = buildParkingResolver(usable);
-    // Snap every ride's start/end to the nearest real GoJet parking of the selected
-    // city. Rental zone names are inconsistent (one spot has several names), which
-    // split departures/arrivals into different "parkings" and inflated capacity.
-    // Keying by the catalog parking id lets flows at the same spot net out.
-    const catPoints = (state.capacity?.allParkings || [])
-      .filter((p) => p.id && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)))
-      .map((p) => ({ name: p.name, key: `id:${p.id}`, lat: Number(p.lat), lng: Number(p.lng), id: p.id }));
-    const catResolver = catPoints.length ? buildResolverIndex(catPoints) : null;
-    const CATALOG_SNAP_M = 60;
-    const snapToCatalog = (ride) => {
-      if (!catResolver) return ride;
-      const out = { ...ride };
-      if (ride.startLat != null && ride.startLng != null) {
-        const n = nearestParkingPoint(Number(ride.startLat), Number(ride.startLng), catResolver);
-        if (n && n.distanceM <= CATALOG_SNAP_M) { out.parkingName = n.name; out.parkingKey = n.key; out.catalogId = n.id; out.isParkingSignal = true; }
-      }
-      if (ride.endLat != null && ride.endLng != null) {
-        const n = nearestParkingPoint(Number(ride.endLat), Number(ride.endLng), catResolver);
-        if (n && n.distanceM <= CATALOG_SNAP_M) { out.endName = n.name; out.endKey = n.key; out.endCatalogId = n.id; }
-      }
-      return out;
-    };
     const recent = usable
       .filter((ride) => !cutoffTs || ride.ts >= cutoffTs)
-      .map((ride) => snapToCatalog(resolveRideEndParking(resolveRideParking(ride, resolver), resolver)));
+      .map((ride) => resolveRideEndParking(resolveRideParking(ride, resolver), resolver));
 
     const groups = {
       weekday: createRentalCapacityGroup("\u0411\u0443\u0434\u043d\u0438"),
@@ -2464,7 +2442,7 @@
       }
       if (isUsableParking(ride.endName) && (!zoneOn || inZone(ride.endZone))) {
         const endMeta = rentalEndMeta(ride);
-        addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, ride.endKey || normalizeSearch(ride.endName), "end", ride);
+        addRentalCapacityEvent(groups, endMeta.weekday, endMeta.dateKey, endMeta.hour, ride.endName, normalizeSearch(ride.endName), "end", ride);
       }
     });
 
@@ -2503,6 +2481,17 @@
       ].filter(Boolean).join(" | ");
       merged.set(row.key, base);
     });
+
+    // Low-sample guard: friday/weekend computed from fewer than 2 days is unreliable
+    // and a single busy day inflates the monitor. Fall back to the weekday capacity
+    // for those blocks until enough friday/weekend days accumulate.
+    if ((groups.friday.days.size || 0) < 2) {
+      merged.forEach((row) => { row.targetFridayDay = row.targetDay || 0; row.targetFridayEvening = row.targetEvening || 0; });
+    }
+    if ((groups.weekend.days.size || 0) < 2) {
+      const wkAll = new Map([...merged.values()].map((r) => [r.key, Math.max(r.targetDay || 0, r.targetEvening || 0)]));
+      weekendRowsRaw.forEach((row) => { const w = wkAll.get(row.key); if (w != null && (row.targetWeekend || 0) > w) row.targetWeekend = w; });
+    }
 
     // Independent Top-N per period: each period keeps its own strongest parkings by
     // its own demand. The same parking can qualify in several periods at once
