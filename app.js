@@ -131,6 +131,15 @@
     try { localStorage.setItem("capacityManualCaps", JSON.stringify(state.capacity.manualCaps || {})); }
     catch (e) {}
   }
+  // Overrides are keyed by the normalized parking NAME so the preview row and the
+  // internal build row always resolve to the same slot (internal parking keys can
+  // differ between start/end events, which broke a key-based match).
+  function manualCapFor(name) {
+    const m = state.capacity && state.capacity.manualCaps;
+    if (!m || !name) return undefined;
+    const v = m[capacityNameKey(name)];
+    return (Number.isFinite(v) && v >= 0) ? v : undefined;
+  }
 
   const monthMap = new Map([
     ["янв", 0], ["январ", 0],
@@ -2537,17 +2546,16 @@
     // It is applied to every block of that parking and marked so Top-N and the
     // >=2 threshold never drop it \u2014 the operator decided this number goes to the
     // monitor.
-    const manual = state.capacity?.manualCaps || {};
     const applyManual = (row) => {
-      const v = manual[row.key];
-      if (!Number.isFinite(v) || v < 0) return;
+      const v = manualCapFor(row.name);
+      if (v === undefined) return;
       row.manual = true;
       row.targetDay = row.targetEvening = v;
       row.targetFridayDay = row.targetFridayEvening = v;
       row.targetWeekend = v;
     };
     merged.forEach(applyManual);
-    weekendRowsRaw.forEach((row) => { const v = manual[row.key]; if (Number.isFinite(v) && v >= 0) { row.manual = true; row.targetWeekend = v; } });
+    weekendRowsRaw.forEach((row) => { const v = manualCapFor(row.name); if (v !== undefined) { row.manual = true; row.targetWeekend = v; } });
 
     // Independent Top-N per period: each period keeps its own strongest parkings by
     // its own demand. The same parking can qualify in several periods at once
@@ -2822,17 +2830,17 @@
       els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок`;
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
-    const man = state.capacity?.manualCaps || {};
     const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
     const body = rows.map((r, i) => {
       const t = CAP_TYPE_LABEL[r.zoneType] || "Баланс";
       const tc = t === "Источник" ? "src" : t === "Накопитель" ? "acc" : "bal";
-      const mv = man[r.key];
-      const hasMan = Number.isFinite(mv) && mv >= 0;
+      const mv = manualCapFor(r.name);
+      const hasMan = mv !== undefined;
+      const shownCap = hasMan ? mv : r.cap;
       return `<tr${hasMan ? ' class="man-row"' : ""}><td>${i + 1}</td><td class="l">${esc(r.name)}</td><td>${r.starts.toFixed(1)}</td><td>${r.finishes.toFixed(1)}</td>`
         + `<td class="${r.balance < 0 ? "neg" : "pos"}">${r.balance > 0 ? "+" : ""}${r.balance.toFixed(1)}</td>`
-        + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(r.cap)}</td>`
-        + `<td><input class="capman" type="number" min="0" step="1" inputmode="numeric" data-key="${esc(r.key)}" value="${hasMan ? mv : ""}" placeholder="авто"></td>`
+        + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(shownCap)}</td>`
+        + `<td><input class="capman" type="number" min="0" step="1" inputmode="numeric" data-key="${esc(capacityNameKey(r.name))}" value="${hasMan ? mv : ""}" placeholder="авто"></td>`
         + `<td class="l blocks">${esc(r.blocks)}</td><td><span class="ztype ${tc}">${t}</span></td></tr>`;
     }).join("");
     els.capacityPreview.innerHTML = `<div class="preview-table-wrap"><table class="preview-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
