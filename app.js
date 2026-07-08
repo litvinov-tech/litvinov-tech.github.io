@@ -81,6 +81,7 @@
     minRides: 3,
     topLimit: 24,
     capacityWindow: 12,
+    capacityCeiling: 15,
     monitorParkingLimit: "all",
     monitorPeriodLimits: {
       weekdayDay: "same",
@@ -192,7 +193,7 @@
       "statusPill", "statusText", "refreshBtn", "dropZone", "fileInput", "uploadBtn",
       "lastUploadText", "lookbackDays", "leadMinutes", "minRides", "topLimit", "monitorParkingLimit",
       "limitWeekdayDay", "limitWeekdayEvening", "limitFridayDay", "limitFridayEvening", "limitWeekend", "capacityZoneFilter",
-      "capacityWindow", "capacityWindowValue",
+      "capacityWindow", "capacityWindowValue", "capacityCeiling",
       "lookbackValue", "leadValue", "minRidesValue", "topLimitValue",
       "exportHistoryBtn", "importHistoryBtn", "historyInput", "exportCsvBtn", "clearBtn",
       "uploadCount", "uploadList", "kpiRides", "kpiParkings", "kpiDays", "kpiConfidence",
@@ -313,6 +314,12 @@
     els.capacityWindow?.addEventListener("input", () => {
       state.settings.capacityWindow = clamp(Number(els.capacityWindow.value) || 12, 2, 12);
       if (els.capacityWindowValue) els.capacityWindowValue.textContent = state.settings.capacityWindow;
+      persistSettingsSoon();
+      rebuildRentalCapacityRows();
+    });
+    els.capacityCeiling?.addEventListener("change", () => {
+      const raw = els.capacityCeiling.value.trim();
+      state.settings.capacityCeiling = raw === "" ? null : Math.max(0, Math.round(Number(raw)) || 0);
       persistSettingsSoon();
       rebuildRentalCapacityRows();
     });
@@ -499,6 +506,7 @@
     });
     if (els.capacityWindow) els.capacityWindow.value = state.settings.capacityWindow || 12;
     if (els.capacityWindowValue) els.capacityWindowValue.textContent = state.settings.capacityWindow || 12;
+    if (els.capacityCeiling) els.capacityCeiling.value = (state.settings.capacityCeiling == null ? "" : state.settings.capacityCeiling);
     document.querySelectorAll("[data-plan-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.planMode === state.settings.planMode);
     });
@@ -2540,6 +2548,17 @@
     if ((groups.weekend.days.size || 0) < 2) {
       const wkAll = new Map([...merged.values()].map((r) => [r.key, Math.max(r.targetDay || 0, r.targetEvening || 0)]));
       weekendRowsRaw.forEach((row) => { const w = wkAll.get(row.key); if (w != null && (row.targetWeekend || 0) > w) row.targetWeekend = w; });
+    }
+
+    // Global ceiling: 55 scooters on one spot is neither tidy nor profitable, so
+    // every computed block is capped at the teto (default 15). Manual overrides
+    // below run AFTER this, so a hand-typed value may deliberately exceed it.
+    const ceilRaw = state.settings?.capacityCeiling;
+    const ceiling = (ceilRaw == null || ceilRaw === "") ? Infinity : Math.max(0, Number(ceilRaw) || 0);
+    if (Number.isFinite(ceiling)) {
+      const capField = (row, f) => { if ((row[f] || 0) > ceiling) row[f] = ceiling; };
+      merged.forEach((row) => { capField(row, "targetDay"); capField(row, "targetEvening"); capField(row, "targetFridayDay"); capField(row, "targetFridayEvening"); capField(row, "targetWeekend"); });
+      weekendRowsRaw.forEach((row) => capField(row, "targetWeekend"));
     }
 
     // Manual overrides: a capacity typed by hand wins over the computed value.
