@@ -2544,8 +2544,10 @@
           isParkingSignal: ride.isParkingSignal || !!ps,
           endName: pe ? pe.name : ride.endName,
           endKey: pe ? pe.key : ride.endKey,
+          _endSnapped: !!pe,
         };
       });
+    try { if (state.capacity) state.capacity._diag = { rl: resolver.length, es: recent.filter((r) => r._endSnapped).length, tot: recent.length }; } catch (e) {}
 
     const groups = {
       weekday: createRentalCapacityGroup("\u0411\u0443\u0434\u043d\u0438"),
@@ -2927,7 +2929,9 @@
       const ts = cityRides.map((r) => r.ts).filter(Boolean).sort((a, b) => a - b);
       const days = new Set(cityRides.map((r) => r.dateKey)).size;
       const per = ts.length ? `${new Date(ts[0]).toLocaleDateString("pt-BR")} – ${new Date(ts[ts.length - 1]).toLocaleDateString("pt-BR")}` : "—";
-      els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок`;
+      const _d = state.capacity?._diag;
+      const _dtag = _d ? ` · 🔧BUILD17 резолвер=${_d.rl} финиш-снап=${_d.es}/${_d.tot}` : " · 🔧BUILD17 нет данных";
+      els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок${_dtag}`;
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
     const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Что делать: 🔴 держать полной (источник, высокий спрос) · 🟡 частично · 🟢 не пополнять (накопитель)">🎯</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
