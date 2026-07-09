@@ -901,7 +901,12 @@
     });
 
     rides.forEach((ride) => {
-      if (!ride || ride.needsNameResolution) return;
+      if (!ride) return;
+      // Seed from any endpoint that already carries a real parking name. Manual files
+      // name the START but leave the END as a zone/coords — without this the named
+      // start parkings never enter the resolver, so end coordinates can't snap back to
+      // them and every parking shows 0 returns. addPoint ignores GPS-fallback names and
+      // null coords, so coordinate-only (GPS report) rides are unaffected.
       addPoint(ride.parkingName, ride.startLat, ride.startLng);
       addPoint(ride.endName, ride.endLat, ride.endLng);
     });
