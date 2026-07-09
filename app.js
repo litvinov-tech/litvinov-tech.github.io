@@ -902,13 +902,12 @@
 
     rides.forEach((ride) => {
       if (!ride) return;
-      // Seed from any endpoint that already carries a real parking name. Manual files
-      // name the START but leave the END as a zone/coords — without this the named
-      // start parkings never enter the resolver, so end coordinates can't snap back to
-      // them and every parking shows 0 returns. addPoint ignores GPS-fallback names and
-      // null coords, so coordinate-only (GPS report) rides are unaffected.
+      // Seed ONLY from START parking names — that is the real parking taxonomy. Manual
+      // files label the END with a different taxonomy (zones/addresses), so seeding ends
+      // would pollute the resolver; instead end COORDINATES are snapped to these start
+      // parkings during the capacity build so returns land on the right parking. addPoint
+      // ignores GPS-fallback names and null coords, so coordinate-only rides use the catalog.
       addPoint(ride.parkingName, ride.startLat, ride.startLng);
-      addPoint(ride.endName, ride.endLat, ride.endLng);
     });
     return buildResolverIndex(points);
   }
@@ -2530,7 +2529,23 @@
     const resolver = buildParkingResolver(usable);
     const recent = usable
       .filter((ride) => !cutoffTs || ride.ts >= cutoffTs)
-      .map((ride) => resolveRideEndParking(resolveRideParking(ride, resolver), resolver));
+      .map((ride) => {
+        // Match BOTH start and end to a parking purely by COORDINATES. Name fields are
+        // inconsistent across export types (manual files label the end with zone names),
+        // so coordinate snapping is the only reliable way to line up returns with starts.
+        const ps = (ride.startLat != null && ride.startLng != null && resolver.length)
+          ? nearestParkingPoint(Number(ride.startLat), Number(ride.startLng), resolver) : null;
+        const pe = (ride.endLat != null && ride.endLng != null && resolver.length)
+          ? nearestParkingPoint(Number(ride.endLat), Number(ride.endLng), resolver) : null;
+        return {
+          ...ride,
+          parkingName: ps ? ps.name : ride.parkingName,
+          parkingKey: ps ? ps.key : ride.parkingKey,
+          isParkingSignal: ride.isParkingSignal || !!ps,
+          endName: pe ? pe.name : ride.endName,
+          endKey: pe ? pe.key : ride.endKey,
+        };
+      });
 
     const groups = {
       weekday: createRentalCapacityGroup("\u0411\u0443\u0434\u043d\u0438"),
