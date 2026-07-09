@@ -804,7 +804,7 @@
       const lat = toNumber(row.lat ?? row.latitude);
       const lng = toNumber(row.lon ?? row.lng ?? row.longitude);
       const point = { lat, lng };
-      if (!isUsableParking(name) || !pointInBh(point)) return;
+      if (!isUsableParking(name) || !pointInBrazil(point)) return;
 
       const catalogPoint = {
         id: cleanText(row.id),
@@ -1006,7 +1006,7 @@
   function firstCoords(row, keys) {
     for (const key of keys) {
       const coords = parseCoords(row[key]);
-      if (coords && pointInBh(coords)) return coords;
+      if (coords && pointInBrazil(coords)) return coords;
     }
     return null;
   }
@@ -1117,7 +1117,7 @@
       endKey: normalizeSearch(endName || ""),
       zone: techZoneList(firstValue(row, ["Тех. зона начала", "Тех.зона начала"])),
       endZone: techZoneList(firstValue(row, ["Тех. зона завершения", "Тех.зона завершения"])),
-      isParkingSignal: isUsableParking(rawParkingName) || Boolean(startCoords && pointInBh(startCoords)),
+      isParkingSignal: isUsableParking(rawParkingName) || Boolean(startCoords && pointInBrazil(startCoords)),
       needsNameResolution,
       scooter,
       qr: cleanText(row["QR-\u043d\u043e\u043c\u0435\u0440"]),
@@ -2930,7 +2930,7 @@
       const days = new Set(cityRides.map((r) => r.dateKey)).size;
       const per = ts.length ? `${new Date(ts[0]).toLocaleDateString("pt-BR")} – ${new Date(ts[ts.length - 1]).toLocaleDateString("pt-BR")}` : "—";
       const _d = state.capacity?._diag;
-      const _dtag = _d ? ` · 🔧BUILD17 резолвер=${_d.rl} финиш-снап=${_d.es}/${_d.tot}` : " · 🔧BUILD17 нет данных";
+      const _dtag = _d ? ` · 🔧BUILD18 резолвер=${_d.rl} финиш-снап=${_d.es}/${_d.tot}` : " · 🔧BUILD18 нет данных";
       els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок${_dtag}`;
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
