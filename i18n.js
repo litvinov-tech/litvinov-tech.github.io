@@ -83,6 +83,7 @@
   const placeholders = [
     ["#capacityCityId", { ru: "вставь city_id сюда", pt: "cole city_id aqui" }],
     ["#searchInput", { ru: "Поиск", pt: "Buscar" }],
+    ["#capacityPreviewSearch", { ru: "Поиск парковки / блока…", pt: "Buscar parking / bloco…" }],
     ["#appsScriptUser", { ru: "usuario", pt: "usuario" }],
     ["#appsScriptPass", { ru: "senha", pt: "senha" }]
   ];
@@ -131,7 +132,34 @@
     "Выбери файл аренды XLSX": "Escolha o arquivo XLSX de alugueis",
     "Нет XLSX parser": "Sem parser XLSX",
     "Читаю файл": "Lendo arquivo",
-    "Ошибка auto capacity": "Erro no auto capacity"
+    "Ошибка auto capacity": "Erro no auto capacity",
+    // Capacity settings block (RU-authored now; these restore PT).
+    "Пн-Чт ДЕНЬ": "Seg-Qui DIA",
+    "Пн-Чт ВЕЧЕР": "Seg-Qui NOITE",
+    "Пт ДЕНЬ": "Sexta DIA",
+    "Пт ВЕЧЕР": "Sexta NOITE",
+    "Общий": "Usar geral",
+    "Нет": "Nenhum",
+    "Все": "Todas",
+    "Окно (ч):": "Janela (h):",
+    "Потолок (макс capacity)": "Teto (máx capacity)",
+    "Коррекция стокаута": "Correção de ruptura",
+    "Агрегация": "Agregação",
+    "Среднее": "Média",
+    "Квантиль 0.85": "Quantil 0.85",
+    "Прогноз — что пойдёт в монитор": "Previsão — o que vai para o monitor",
+    "По capacity": "Por capacity",
+    "По стартам": "Por starts",
+    "По балансу": "Por balanço",
+    // Capacity preview table headers (built in app.js).
+    "Парковка": "Estacionamento",
+    "Старты/дн": "Starts/dia",
+    "Финиши/дн": "Fins/dia",
+    "Баланс": "Balanço",
+    "Возврат%": "Retorno%",
+    "✍ Ручной": "✍ Manual",
+    "Блоки": "Blocos",
+    "Тип": "Tipo"
   }));
   const replacements = [
     [/\bдн\./g, "dias"],
@@ -170,6 +198,7 @@
   ];
 
   const regexTranslations = [
+    [/^Топ (\d+)$/u, "Top $1"],
     [/^Сохраняю ([\d\s.,]+)\/([\d\s.,]+)$/u, "Salvando $1/$2"],
     [/^Показано ([\d\s.,]+) · считаю capacity$/u, "Mostrado $1 · calculando capacity"],
     [/^Добавлено ([\d\s.,]+)$/u, "Adicionado $1"],

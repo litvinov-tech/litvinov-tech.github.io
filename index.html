@@ -262,10 +262,10 @@
                     <h3>6. Как выбираются парковки для monitor</h3>
                     <ul>
                       <li>Сайт сортирует парковки по самому большому capacity: сначала самые важные.</li>
-                      <li>Общий фильтр <strong>Qtd. no monitor</strong> ограничивает выдачу: все, Top 50, Top 100 и т.д.</li>
-                      <li><strong>Лимиты по периодам</strong> (Seg-Qui DIA/NOITE, Sexta DIA/NOITE, Fim de semana) — можно задать своё количество на каждый период отдельно. «Usar geral» = брать общий лимит. Отбор <strong>независимый</strong>: у каждого периода свой топ по своему спросу, и одна и та же парковка может попасть сразу в несколько периодов (например, и в пятницу вечером, и в будни) — всё зависит от аренд.</li>
-                      <li><strong>Tech zone</strong> — фильтр по техзоне из файла аренд: считать только парковки выбранной зоны (старты и возвраты фильтруются по своей зоне). «Todas as zonas» = без фильтра.</li>
-                      <li><strong>Janela (h)</strong> — длина окна пика (2–12 ч): capacity = пик дефицита в худшем окне такой длины. Меньше окно — острее пики.</li>
+                      <li>Общий фильтр <strong>Кол-во в monitor</strong> ограничивает выдачу: все, Топ 50, Топ 100 и т.д.</li>
+                      <li><strong>Лимиты по периодам</strong> (Пн-Чт ДЕНЬ/ВЕЧЕР, Пт ДЕНЬ/ВЕЧЕР, Выходные) — можно задать своё количество на каждый период отдельно. «Общий» = брать общий лимит. Отбор <strong>независимый</strong>: у каждого периода свой топ по своему спросу, и одна и та же парковка может попасть сразу в несколько периодов (например, и в пятницу вечером, и в будни) — всё зависит от аренд.</li>
+                      <li><strong>Tech zone</strong> — фильтр по техзоне из файла аренд: считать только парковки выбранной зоны (старты и возвраты фильтруются по своей зоне). Ничего не выбрано = без фильтра.</li>
+                      <li><strong>Окно (ч)</strong> — длина окна пика (2–12 ч): capacity = пик дефицита в худшем окне такой длины. Меньше окно — острее пики.</li>
                       <li>В monitor попадают строки с capacity <strong>2+</strong>; capacity сохраняется как есть (2 остаётся 2).</li>
                       <li>Если парковка уже есть в monitor — capacity обновляется, иначе добавляется новая строка.</li>
                     </ul>
@@ -285,10 +285,10 @@
                   <div class="manual-section manual-checklist">
                     <h3>8. Как пользоваться по шагам</h3>
                     <ol>
-                      <li>Выбери город в <strong>Cidade</strong>.</li>
+                      <li>Выбери город в <strong>Город</strong>.</li>
                       <li>Нажми <strong>Загрузить аренды</strong> и выбери файл аренд (XLSX).</li>
-                      <li>При необходимости выбери <strong>Tech zone</strong> (если хочешь считать только по одной техзоне) и подстрой <strong>Janela (h)</strong>.</li>
-                      <li>Задай количество: общий <strong>Qtd. no monitor</strong> и/или отдельные <strong>лимиты по периодам</strong> (Seg-Qui DIA/NOITE, Sexta, Fim de semana). Меняются на лету — пересчёт сразу.</li>
+                      <li>При необходимости выбери <strong>Tech zone</strong> (если хочешь считать только по одной техзоне) и подстрой <strong>Окно (ч)</strong>.</li>
+                      <li>Задай количество: общий <strong>Кол-во в monitor</strong> и/или отдельные <strong>лимиты по периодам</strong> (Пн-Чт ДЕНЬ/ВЕЧЕР, Пт, Выходные). Меняются на лету — пересчёт сразу.</li>
                       <li>Нажми <strong>Собрать по арендам</strong>.</li>
                       <li>Если сайт пишет, что нет parking_id, нажми <strong>All parkings</strong> (или импортируй каталог).</li>
                       <li>Если нет schedule_id, нажми <strong>Monitor parkings</strong> или импортируй полный <strong>GoJet JSON</strong>.</li>
@@ -410,13 +410,13 @@
               <label>
                 <span>Qtd. no monitor</span>
                 <select id="monitorParkingLimit">
-                  <option value="all">Todas</option>
-                  <option value="50">Top 50</option>
-                  <option value="100">Top 100</option>
-                  <option value="150">Top 150</option>
-                  <option value="200">Top 200</option>
-                  <option value="250">Top 250</option>
-                  <option value="300">Top 300</option>
+                  <option value="all">Все</option>
+                  <option value="50">Топ 50</option>
+                  <option value="100">Топ 100</option>
+                  <option value="150">Топ 150</option>
+                  <option value="200">Топ 200</option>
+                  <option value="250">Топ 250</option>
+                  <option value="300">Топ 300</option>
                 </select>
               </label>
               <button id="allParkingsBtn" type="button">
@@ -439,52 +439,52 @@
                 <select id="capacityZoneFilter" multiple size="4"></select>
               </label>
               <label>
-                <span>Seg-Qui DIA</span>
+                <span>Пн-Чт ДЕНЬ</span>
                 <select id="limitWeekdayDay">
-                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                  <option value="same">Общий</option><option value="0">Нет</option><option value="all">Все</option><option value="10">Топ 10</option><option value="20">Топ 20</option><option value="30">Топ 30</option><option value="50">Топ 50</option><option value="80">Топ 80</option><option value="100">Топ 100</option><option value="150">Топ 150</option><option value="200">Топ 200</option><option value="300">Топ 300</option>
                 </select>
               </label>
               <label>
-                <span>Seg-Qui NOITE</span>
+                <span>Пн-Чт ВЕЧЕР</span>
                 <select id="limitWeekdayEvening">
-                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                  <option value="same">Общий</option><option value="0">Нет</option><option value="all">Все</option><option value="10">Топ 10</option><option value="20">Топ 20</option><option value="30">Топ 30</option><option value="50">Топ 50</option><option value="80">Топ 80</option><option value="100">Топ 100</option><option value="150">Топ 150</option><option value="200">Топ 200</option><option value="300">Топ 300</option>
                 </select>
               </label>
               <label>
-                <span>Sexta DIA</span>
+                <span>Пт ДЕНЬ</span>
                 <select id="limitFridayDay">
-                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                  <option value="same">Общий</option><option value="0">Нет</option><option value="all">Все</option><option value="10">Топ 10</option><option value="20">Топ 20</option><option value="30">Топ 30</option><option value="50">Топ 50</option><option value="80">Топ 80</option><option value="100">Топ 100</option><option value="150">Топ 150</option><option value="200">Топ 200</option><option value="300">Топ 300</option>
                 </select>
               </label>
               <label>
-                <span>Sexta NOITE</span>
+                <span>Пт ВЕЧЕР</span>
                 <select id="limitFridayEvening">
-                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                  <option value="same">Общий</option><option value="0">Нет</option><option value="all">Все</option><option value="10">Топ 10</option><option value="20">Топ 20</option><option value="30">Топ 30</option><option value="50">Топ 50</option><option value="80">Топ 80</option><option value="100">Топ 100</option><option value="150">Топ 150</option><option value="200">Топ 200</option><option value="300">Топ 300</option>
                 </select>
               </label>
               <label>
-                <span>Fim de semana</span>
+                <span>Выходные</span>
                 <select id="limitWeekend">
-                  <option value="same">Usar geral</option><option value="0">Nenhum</option><option value="all">Todas</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="30">Top 30</option><option value="50">Top 50</option><option value="80">Top 80</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="300">Top 300</option>
+                  <option value="same">Общий</option><option value="0">Нет</option><option value="all">Все</option><option value="10">Топ 10</option><option value="20">Топ 20</option><option value="30">Топ 30</option><option value="50">Топ 50</option><option value="80">Топ 80</option><option value="100">Топ 100</option><option value="150">Топ 150</option><option value="200">Топ 200</option><option value="300">Топ 300</option>
                 </select>
               </label>
               <label class="range-row">
-                <span>Janela (h): <strong id="capacityWindowValue">12</strong></span>
+                <span>Окно (ч): <strong id="capacityWindowValue">12</strong></span>
                 <input id="capacityWindow" type="range" min="2" max="12" step="1" value="12">
               </label>
               <label>
-                <span title="Máximo de capacity por parking. 55 patinetes num ponto só não convém — o teto corta todos os picos.">Teto (máx capacity)</span>
-                <input id="capacityCeiling" type="number" min="0" step="1" value="15" placeholder="sem teto">
+                <span title="Максимум capacity на парковку. 55 самокатов в одной точке не нужно — потолок режет все пики.">Потолок (макс capacity)</span>
+                <input id="capacityCeiling" type="number" min="0" step="1" value="15" placeholder="без потолка">
               </label>
               <label class="stockout-row">
-                <span title="Corrige dias em que o ponto ficou vazio (ruptura): o pico é uma cota inferior e é elevado para uma estimativa honesta (dias limpos próprios → vizinhos → partidas). Suba o teto para os valores corrigidos aparecerem.">Correção de ruptura</span>
+                <span title="Коррекция дней, когда точка опустела (стокаут): пик — это нижняя граница, его поднимают до честной оценки (свои чистые дни → соседи → старты). Подними потолок, чтобы скорректированные значения были видны.">Коррекция стокаута</span>
                 <input id="stockoutEnabled" type="checkbox">
               </label>
               <label>
-                <span title="Como agregar os picos diários (corrigidos) em capacity.">Agregação</span>
+                <span title="Как агрегировать дневные (скорректированные) пики в capacity.">Агрегация</span>
                 <select id="stockoutAggregation">
-                  <option value="mean">Média</option>
-                  <option value="q85">Quantil 0.85</option>
+                  <option value="mean">Среднее</option>
+                  <option value="q85">Квантиль 0.85</option>
                 </select>
               </label>
             </div>
@@ -512,15 +512,15 @@
             </div>
             <div class="capacity-preview" id="capacityPreviewPanel">
               <div class="preview-head">
-                <h3>Previsão — o que vai para o monitor</h3>
+                <h3>Прогноз — что пойдёт в монитор</h3>
                 <span id="capacityPreviewInfo" class="preview-info"></span>
               </div>
               <div class="preview-tools">
-                <input id="capacityPreviewSearch" type="text" placeholder="Buscar parking / bloco…">
+                <input id="capacityPreviewSearch" type="text" placeholder="Поиск парковки / блока…">
                 <div class="preview-sort" id="capacityPreviewSort">
-                  <button type="button" data-sort="cap" class="active">Por capacity</button>
-                  <button type="button" data-sort="starts">Por starts</button>
-                  <button type="button" data-sort="balance">Por balanço</button>
+                  <button type="button" data-sort="cap" class="active">По capacity</button>
+                  <button type="button" data-sort="starts">По стартам</button>
+                  <button type="button" data-sort="balance">По балансу</button>
                 </div>
               </div>
               <p class="preview-hint">💡 В колонке <b>✍ Manual</b> можно вручную вписать capacity для нужной парковки — это значение перебьёт расчёт и пойдёт в монитор. Очисти поле, чтобы вернуть авто.</p>

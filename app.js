@@ -3162,7 +3162,7 @@
       els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок${_dtag}`;
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
-    const head = `<tr><th>#</th><th class="l">Parking</th><th>Starts/dia</th><th>Fins/dia</th><th>Balanço</th><th>Retorno%</th><th>CAPACITY</th><th title="Что делать: 🔴 держать полной (источник, высокий спрос) · 🟡 частично · 🟢 не пополнять (накопитель)">🎯</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Manual</th><th class="l">Blocos</th><th>Tipo</th></tr>`;
+    const head = `<tr><th>#</th><th class="l">Парковка</th><th>Старты/дн</th><th>Финиши/дн</th><th>Баланс</th><th>Возврат%</th><th>CAPACITY</th><th title="Что делать: 🔴 держать полной (источник, высокий спрос) · 🟡 частично · 🟢 не пополнять (накопитель)">🎯</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Ручной</th><th class="l">Блоки</th><th>Тип</th></tr>`;
     const body = rows.map((r, i) => {
       const t = CAP_TYPE_LABEL[r.zoneType] || "Баланс";
       const tc = t === "Источник" ? "src" : t === "Накопитель" ? "acc" : "bal";
@@ -3180,6 +3180,57 @@
         + `<td class="l blocks">${esc(r.blocks)}</td><td><span class="ztype ${tc}">${t}</span></td></tr>`;
     }).join("");
     els.capacityPreview.innerHTML = `<div class="preview-table-wrap"><table class="preview-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+    setupCapPreviewResizers();
+  }
+
+  // Persisted per-column widths (px) for the capacity preview table, so drag-resize
+  // survives re-renders (sort/search/manual edits). Reset if the column count changes.
+  let capColWidths = null;
+  function setupCapPreviewResizers() {
+    const table = els.capacityPreview?.querySelector("table.preview-table");
+    if (!table || !table.tHead) return;
+    const ths = [...table.tHead.rows[0].cells];
+    if (!capColWidths || capColWidths.length !== ths.length) {
+      // Measure natural widths while layout is still auto, then lock them in.
+      capColWidths = ths.map((th) => Math.round(th.getBoundingClientRect().width));
+    }
+    table.classList.add("resizable");
+    table.style.width = capColWidths.reduce((a, b) => a + b, 0) + "px";
+    ths.forEach((th, i) => {
+      th.style.width = capColWidths[i] + "px";
+      const handle = document.createElement("div");
+      handle.className = "col-resizer";
+      handle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startW = th.getBoundingClientRect().width;
+        const onMove = (ev) => {
+          const w = Math.max(40, Math.round(startW + ev.clientX - startX));
+          th.style.width = w + "px";
+          capColWidths[i] = w;
+          table.style.width = capColWidths.reduce((a, b) => a + b, 0) + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          document.body.style.cursor = "";
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        document.body.style.cursor = "col-resize";
+      });
+      handle.addEventListener("dblclick", (e) => {
+        // double-click a handle: clear stored widths -> auto-fit on next render
+        e.preventDefault();
+        capColWidths = null;
+        table.classList.remove("resizable");
+        table.style.width = "";
+        ths.forEach((c) => { c.style.width = ""; });
+        renderCapacityPreview();
+      });
+      th.appendChild(handle);
+    });
   }
 
   async function importCapacityCsv(file) {
