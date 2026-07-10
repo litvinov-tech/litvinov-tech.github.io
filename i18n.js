@@ -159,7 +159,9 @@
     "Возврат%": "Retorno%",
     "✍ Ручной": "✍ Manual",
     "Блоки": "Blocos",
-    "Тип": "Tipo"
+    "Тип": "Tipo",
+    "Без стокаута": "Sem ruptura",
+    "Стокаут": "Ruptura"
   }));
   const replacements = [
     [/\bдн\./g, "dias"],

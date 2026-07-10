@@ -2467,7 +2467,7 @@
       if (!state.capacity.monitorRows.length) {
         await loadSelectedCityMonitorRules();
       }
-      const built = buildRentalCapacityRows(state.rides);
+      const built = buildBothStockoutVariants().active;
       if (!built.sourceRows.length && !built.weekendRows.length) {
         toast("\u0412 \u0430\u0440\u0435\u043d\u0434\u0430\u0445 \u043d\u0435 \u043d\u0430\u0448\u0435\u043b \u043f\u0430\u0440\u043a\u043e\u0432\u043a\u0438 \u0441 capacity 2+", true);
         state.capacity.autoRental = built.summary;
@@ -3100,10 +3100,10 @@
   let capPreviewSearch = "";
   const CAP_TYPE_LABEL = { "стартовая": "Источник", "финишная": "Накопитель", "ровная": "Баланс" };
 
-  function renderCapacityPreview() {
-    if (!els.capacityPreview) return;
-    const src = state.capacity?.sourceRows || [];
-    const wknd = state.capacity?.weekendRows || [];
+  // Merge weekday + weekend rows per parking and compute the display capacity
+  // (max block target, ceiling applied — manual overrides bypass the ceiling).
+  // Shared by the preview and by the with/without-stockout comparison columns.
+  function mergeCapacityRows(src, wknd) {
     const byKey = new Map();
     const merge = (r) => {
       const k = r.key || capacityNameKey(r.name);
@@ -3117,13 +3117,10 @@
       o.tfd = Math.max(o.tfd, r.targetFridayDay || 0); o.tfe = Math.max(o.tfe, r.targetFridayEvening || 0);
       o.tw = Math.max(o.tw, r.targetWeekend || 0);
     };
-    src.forEach(merge); wknd.forEach(merge);
-    // Mirror the build: cap every block at the teto for display too, so the
-    // preview never shows a number the exported CSV would not. Manual overrides
-    // may exceed the ceiling (operator's call).
+    (src || []).forEach(merge); (wknd || []).forEach(merge);
     const ceilRaw = state.settings?.capacityCeiling;
     const ceiling = (ceilRaw == null || ceilRaw === "") ? Infinity : Math.max(0, Number(ceilRaw) || 0);
-    let rows = [...byKey.values()].map((o) => {
+    return [...byKey.values()].map((o) => {
       const mc = manualCapFor(o.name);
       const lim = (mc !== undefined) ? Infinity : ceiling;
       if (Number.isFinite(lim)) {
@@ -3139,13 +3136,26 @@
         (o.tfd || o.tfe) ? `Пт ${o.tfd}/${o.tfe}` : "",
         o.tw ? `Вых ${o.tw}` : "",
       ].filter(Boolean).join(" · ");
-      // Fill priority: demand that leaves and is NOT replenished on-site.
-      // High starts + low return => empties fast => must stay full. Accumulators
-      // (return >= 1) score 0 — they refill themselves.
       const retC = Math.max(0, Math.min(1, ret));
       const pri = o.starts * (1 - retC);
       return { ...o, cap, moon, sun, ret, balance: o.finishes - o.starts, blocks, pri };
     });
+  }
+  function capMapOf(rows) {
+    const m = new Map();
+    rows.forEach((r) => m.set(r.key, r.cap));
+    return m;
+  }
+
+  function renderCapacityPreview() {
+    if (!els.capacityPreview) return;
+    // Active build (per the stockout checkbox) drives the table + what goes to CSV.
+    let rows = mergeCapacityRows(state.capacity?.sourceRows, state.capacity?.weekendRows);
+    // Both variants for the comparison columns (computed in buildBothStockoutVariants).
+    const builds = state.capacity?.stockoutBuilds;
+    const baseMap = builds ? capMapOf(mergeCapacityRows(builds.off.sourceRows, builds.off.weekendRows)) : null;
+    const corrMap = builds ? capMapOf(mergeCapacityRows(builds.on.sourceRows, builds.on.weekendRows)) : null;
+    const flag = !!state.settings.stockoutEnabled;
     const f = (capPreviewSearch || "").toLowerCase();
     if (f) rows = rows.filter((r) => (r.name || "").toLowerCase().includes(f) || (r.blocks || "").toLowerCase().includes(f));
     const cmp = { priority: (a, b) => b.pri - a.pri, cap: (a, b) => b.cap - a.cap, starts: (a, b) => b.starts - a.starts, balance: (a, b) => a.balance - b.balance };
@@ -3157,24 +3167,32 @@
       const ts = cityRides.map((r) => r.ts).filter(Boolean).sort((a, b) => a - b);
       const days = new Set(cityRides.map((r) => r.dateKey)).size;
       const per = ts.length ? `${new Date(ts[0]).toLocaleDateString("pt-BR")} – ${new Date(ts[ts.length - 1]).toLocaleDateString("pt-BR")}` : "—";
-      const _d = state.capacity?._diag;
-      const _dtag = _d ? ` · 🔧BUILD18 резолвер=${_d.rl} финиш-снап=${_d.es}/${_d.tot}` : " · 🔧BUILD18 нет данных";
-      els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок${_dtag}`;
+      const out = flag ? "со стокаутом" : "без стокаута";
+      els.capacityPreviewInfo.textContent = `${city.name} · ${per} · ${fmtInt(days)} дней · ${fmtInt(cityRides.length)} аренд · ${fmtInt(rows.length)} парковок · в монитор идёт: ${out}`;
     }
     if (!rows.length) { els.capacityPreview.innerHTML = `<div class="preview-empty">Загрузи аренды и нажми «Собрать» — здесь появится, что пойдёт в монитор.</div>`; return; }
-    const head = `<tr><th>#</th><th class="l">Парковка</th><th>Старты/дн</th><th>Финиши/дн</th><th>Баланс</th><th>Возврат%</th><th>CAPACITY</th><th title="Что делать: 🔴 держать полной (источник, высокий спрос) · 🟡 частично · 🟢 не пополнять (накопитель)">🎯</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Ручной</th><th class="l">Блоки</th><th>Тип</th></tr>`;
+    const head = `<tr><th>#</th><th class="l">Парковка</th><th>Старты/дн</th><th>Финиши/дн</th><th>Баланс</th><th>Возврат%</th>`
+      + `<th class="${flag ? "" : "th-active"}" title="Capacity без коррекции стокаута${flag ? "" : " · идёт в монитор"}">Без стокаута</th>`
+      + `<th class="${flag ? "th-active" : ""}" title="Capacity с коррекцией стокаута — опустошённые дни подняты${flag ? " · идёт в монитор" : ""}">Стокаут</th>`
+      + `<th title="Что делать: 🔴 держать полной (источник, высокий спрос) · 🟡 частично · 🟢 не пополнять (накопитель)">🎯</th><th title="Ручной capacity — перебивает расчёт и идёт в монитор">✍ Ручной</th><th class="l">Блоки</th><th>Тип</th></tr>`;
     const body = rows.map((r, i) => {
       const t = CAP_TYPE_LABEL[r.zoneType] || "Баланс";
       const tc = t === "Источник" ? "src" : t === "Накопитель" ? "acc" : "bal";
       const mv = manualCapFor(r.name);
       const hasMan = mv !== undefined;
-      const shownCap = hasMan ? mv : r.cap;
+      const baseCap = hasMan ? mv : (baseMap && baseMap.has(r.key) ? baseMap.get(r.key) : r.cap);
+      const corrCap = hasMan ? mv : (corrMap && corrMap.has(r.key) ? corrMap.get(r.key) : r.cap);
+      const up = !hasMan && corrCap > baseCap;
+      const baseCls = "cap-col " + (flag ? "cap-alt" : "cap");
+      const corrCls = "cap-col " + (flag ? "cap" : "cap-alt") + (up ? " up" : "");
       let rec = "🟡 50%", recCls = "rec-mid";
       if (r.balance < -0.5) { rec = "🔴 100%"; recCls = "rec-fill"; }
       else if (r.balance > 0.5) { rec = "🟢 0%"; recCls = "rec-no"; }
       return `<tr${hasMan ? ' class="man-row"' : ""}><td>${i + 1}</td><td class="l">${esc(r.name)}</td><td>${r.starts.toFixed(1)}</td><td>${r.finishes.toFixed(1)}</td>`
         + `<td class="${r.balance < 0 ? "neg" : "pos"}">${r.balance > 0 ? "+" : ""}${r.balance.toFixed(1)}</td>`
-        + `<td>${(r.ret * 100).toFixed(0)}%</td><td class="cap">${fmtInt(shownCap)}</td>`
+        + `<td>${(r.ret * 100).toFixed(0)}%</td>`
+        + `<td class="${baseCls}">${fmtInt(baseCap)}</td>`
+        + `<td class="${corrCls}">${fmtInt(corrCap)}${up ? " ▲" : ""}</td>`
         + `<td><span class="rec ${recCls}">${rec}</span></td>`
         + `<td><input class="capman" type="number" min="0" step="1" inputmode="numeric" data-key="${esc(capacityNameKey(r.name))}" value="${hasMan ? mv : ""}" placeholder="авто"></td>`
         + `<td class="l blocks">${esc(r.blocks)}</td><td><span class="ztype ${tc}">${t}</span></td></tr>`;
@@ -3281,9 +3299,24 @@
 
   // Recompute capacity rows from already-loaded rides (no network). Used when a
   // period limit / window / zone filter changes so gating re-applies instantly.
+  // Build BOTH stockout variants (off + on) from the same rides so the preview can
+  // show capacity with and without correction side by side. The active one (per the
+  // checkbox) is what feeds the monitor/CSV. Temporarily toggles the setting flag,
+  // restoring it before returning (never persisted mid-build). Stashes both on state.
+  function buildBothStockoutVariants() {
+    const flag = !!state.settings.stockoutEnabled;
+    state.settings.stockoutEnabled = false;
+    const off = buildRentalCapacityRows(state.rides);
+    state.settings.stockoutEnabled = true;
+    const on = buildRentalCapacityRows(state.rides);
+    state.settings.stockoutEnabled = flag;
+    if (state.capacity) state.capacity.stockoutBuilds = { off, on };
+    return { off, on, active: flag ? on : off, flag };
+  }
+
   function rebuildRentalCapacityRows() {
     if (!state.rides?.length) { recomputeCapacityCompare(); renderCapacityCompare(); return; }
-    const built = buildRentalCapacityRows(state.rides);
+    const built = buildBothStockoutVariants().active;
     state.capacity.sourceRows = built.sourceRows;
     state.capacity.weekendRows = built.weekendRows;
     state.capacity.autoRental = built.summary;
