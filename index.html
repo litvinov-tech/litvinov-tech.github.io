@@ -476,6 +476,17 @@
                 <span title="Máximo de capacity por parking. 55 patinetes num ponto só não convém — o teto corta todos os picos.">Teto (máx capacity)</span>
                 <input id="capacityCeiling" type="number" min="0" step="1" value="15" placeholder="sem teto">
               </label>
+              <label class="stockout-row">
+                <span title="Corrige dias em que o ponto ficou vazio (ruptura): o pico é uma cota inferior e é elevado para uma estimativa honesta (dias limpos próprios → vizinhos → partidas). Suba o teto para os valores corrigidos aparecerem.">Correção de ruptura</span>
+                <input id="stockoutEnabled" type="checkbox">
+              </label>
+              <label>
+                <span title="Como agregar os picos diários (corrigidos) em capacity.">Agregação</span>
+                <select id="stockoutAggregation">
+                  <option value="mean">Média</option>
+                  <option value="q85">Quantil 0.85</option>
+                </select>
+              </label>
             </div>
             <div class="apps-bridge">
               <label>

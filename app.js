@@ -115,6 +115,13 @@
     topLimit: 24,
     capacityWindow: 12,
     capacityCeiling: 15,
+    // Stockout censoring correction (see plan): a day when a parking ran empty
+    // under-reports demand; lift its censored peak to an honest estimate.
+    stockoutEnabled: false,        // master switch; OFF => byte-identical to legacy output
+    stockoutRadiusM: 500,          // neighbour radius (ladder 3b) + catalog-capacity coord fallback
+    stockoutGrowthFactor: 1.5,     // stop-spiral: cap_new <= cap_old * factor
+    stockoutAggregation: "mean",   // "mean" | "q85"
+    stockoutQuantile: 0.85,
     monitorParkingLimit: "all",
     monitorPeriodLimits: {
       weekdayDay: "same",
@@ -226,7 +233,7 @@
       "statusPill", "statusText", "refreshBtn", "dropZone", "fileInput", "uploadBtn",
       "lastUploadText", "lookbackDays", "leadMinutes", "minRides", "topLimit", "monitorParkingLimit",
       "limitWeekdayDay", "limitWeekdayEvening", "limitFridayDay", "limitFridayEvening", "limitWeekend", "capacityZoneFilter",
-      "capacityWindow", "capacityWindowValue", "capacityCeiling",
+      "capacityWindow", "capacityWindowValue", "capacityCeiling", "stockoutEnabled", "stockoutAggregation",
       "lookbackValue", "leadValue", "minRidesValue", "topLimitValue",
       "exportHistoryBtn", "importHistoryBtn", "historyInput", "exportCsvBtn", "clearBtn",
       "uploadCount", "uploadList", "kpiRides", "kpiParkings", "kpiDays", "kpiConfidence",
@@ -353,6 +360,16 @@
     els.capacityCeiling?.addEventListener("change", () => {
       const raw = els.capacityCeiling.value.trim();
       state.settings.capacityCeiling = raw === "" ? null : Math.max(0, Math.round(Number(raw)) || 0);
+      persistSettingsSoon();
+      rebuildRentalCapacityRows();
+    });
+    els.stockoutEnabled?.addEventListener("change", () => {
+      state.settings.stockoutEnabled = !!els.stockoutEnabled.checked;
+      persistSettingsSoon();
+      rebuildRentalCapacityRows();
+    });
+    els.stockoutAggregation?.addEventListener("change", () => {
+      state.settings.stockoutAggregation = els.stockoutAggregation.value === "q85" ? "q85" : "mean";
       persistSettingsSoon();
       rebuildRentalCapacityRows();
     });
@@ -540,6 +557,8 @@
     if (els.capacityWindow) els.capacityWindow.value = state.settings.capacityWindow || 12;
     if (els.capacityWindowValue) els.capacityWindowValue.textContent = state.settings.capacityWindow || 12;
     if (els.capacityCeiling) els.capacityCeiling.value = (state.settings.capacityCeiling == null ? "" : state.settings.capacityCeiling);
+    if (els.stockoutEnabled) els.stockoutEnabled.checked = !!state.settings.stockoutEnabled;
+    if (els.stockoutAggregation) els.stockoutAggregation.value = state.settings.stockoutAggregation === "q85" ? "q85" : "mean";
     document.querySelectorAll("[data-plan-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.planMode === state.settings.planMode);
     });
@@ -2569,9 +2588,10 @@
       }
     });
 
-    const weekdayRows = summarizeRentalCapacityGroup(groups.weekday);
-    const fridayRows = summarizeRentalCapacityGroup(groups.friday);
-    const weekendRowsRaw = summarizeRentalCapacityGroup(groups.weekend);
+    const capIndex = buildCatalogCapacityIndex();
+    const weekdayRows = summarizeRentalCapacityGroup(groups.weekday, capIndex);
+    const fridayRows = summarizeRentalCapacityGroup(groups.friday, capIndex);
+    const weekendRowsRaw = summarizeRentalCapacityGroup(groups.weekend, capIndex);
     const merged = new Map();
 
     weekdayRows.forEach((row) => {
@@ -2733,33 +2753,105 @@
     return { dateKey: ride.dateKey, weekday: ride.weekday, hour: ride.hour };
   }
 
-  function summarizeRentalCapacityGroup(group) {
+  function summarizeRentalCapacityGroup(group, capIndex) {
     const days = [...group.days].sort();
     if (!days.length) return [];
     const rows = [];
-    group.parkings.forEach((item) => {
-      const capsAll = [];
-      const capsDay = [];
-      const capsEvening = [];
-      const winH = clamp(Number(state.settings.capacityWindow) || 12, 2, 12);
-      const dayHours = Array.from({ length: 12 }, (_, hour) => hour);
-      const eveningHours = Array.from({ length: 12 }, (_, hour) => hour + 12);
-      const allHours = Array.from({ length: 24 }, (_, hour) => hour);
-      days.forEach((day) => {
-        const matrix = item.days.get(day) || emptyRentalDayMatrix();
-        capsAll.push(rentalMaxDeficit(matrix, allHours, 24));
-        capsDay.push(rentalMaxDeficit(matrix, dayHours, winH));
-        capsEvening.push(rentalMaxDeficit(matrix, eveningHours, winH));
+    const stockoutOn = !!state.settings.stockoutEnabled;
+    // Group-level precomputes (once, not per parking).
+    const winH = clamp(Number(state.settings.capacityWindow) || 12, 2, 12);
+    const dayHours = Array.from({ length: 12 }, (_, hour) => hour);
+    const eveningHours = Array.from({ length: 12 }, (_, hour) => hour + 12);
+    const allHours = Array.from({ length: 24 }, (_, hour) => hour);
+    // Blocks: day/evening use the sliding window; "all" is the whole 24h (as in git).
+    const BLOCKS = [
+      { name: "day", hours: dayHours, win: winH },
+      { name: "evening", hours: eveningHours, win: winH },
+      { name: "all", hours: allHours, win: 24 },
+    ];
+    const radiusM = Number(state.settings.stockoutRadiusM) || 500;
+    const growthFactor = Number(state.settings.stockoutGrowthFactor) || 1.5;
+    const aggMode = state.settings.stockoutAggregation || "mean";
+    const aggQ = Number(state.settings.stockoutQuantile) || 0.85;
+    const parkingList = [...group.parkings.values()];
+    const cityDep = stockoutOn ? cityWideBlockDepartures(group, days) : null;
+    const neighbors = stockoutOn ? neighborsWithinRadius(parkingList, radiusM) : null;
+    const capIdx = capIndex || { byKey: new Map(), points: [] };
+
+    // \u2500\u2500 Phase A: per parking \u00d7 day \u00d7 block fact table {peaks, starts, censored} \u2500\u2500
+    parkingList.forEach((item) => {
+      const facts = {};
+      let observedMax = 0;
+      BLOCKS.forEach((b) => {
+        const peaks = [];
+        const starts = [];
+        days.forEach((day) => {
+          const matrix = item.days.get(day) || emptyRentalDayMatrix();
+          const pk = rentalMaxDeficit(matrix, b.hours, b.win);
+          peaks.push(pk);
+          starts.push(blockStarts(matrix, b.hours));
+          if (pk > observedMax) observedMax = pk;
+        });
+        facts[b.name] = { peaks, starts, censored: peaks.map(() => false) };
       });
-      const rawAll = Math.ceil(avg(capsAll));
-      const rawDay = Math.ceil(avg(capsDay));
-      const rawEvening = Math.ceil(avg(capsEvening));
+      const ss = stockoutOn ? resolveStartStock(item, capIdx, radiusM, observedMax) : { stock: 0, fromCatalog: false };
+      item._facts = facts;
+      item._startStock = ss.stock;
+      item._fromCatalog = ss.fromCatalog;
+      if (stockoutOn && ss.stock > 0) {
+        BLOCKS.forEach((b) => {
+          const f = facts[b.name];
+          days.forEach((day, i) => {
+            const matrix = item.days.get(day) || emptyRentalDayMatrix();
+            f.censored[i] = blockStockout(matrix, b.hours, ss.stock, cityDep.get(day));
+          });
+        });
+      }
+    });
+
+    // \u2500\u2500 Phase B: ladder-correct censored peaks, aggregate, stop-spiral \u2500\u2500
+    // Needs Phase A done for ALL parkings first (3b reads neighbours' clean days).
+    function correctBlock(item, blockName) {
+      const f = item._facts[blockName];
+      if (!stockoutOn) {
+        return { value: Math.ceil(avg(f.peaks)), wasCorrected: false };
+      }
+      const cleanPeaks = f.peaks.filter((_, i) => !f.censored[i]);
+      const ownMedian = cleanPeaks.length ? median(cleanPeaks) : null;   // 3a
+      let coef = null;
+      if (ownMedian == null) coef = neighborCoef(item, blockName, neighbors, parkingList); // 3b
+      let touched = false;
+      const corr = f.peaks.map((obs, i) => {
+        if (!f.censored[i]) return obs;
+        let est;
+        if (ownMedian != null) est = ownMedian;              // 3a
+        else if (coef != null) est = f.starts[i] * coef;     // 3b
+        else est = f.starts[i];                              // 3c
+        const lifted = Math.max(obs, est);                   // only ever raise
+        if (lifted > obs) touched = true;
+        return lifted;
+      });
+      let value = Math.ceil(aggregateCapacity(corr, aggMode, aggQ));
+      if (item._fromCatalog) value = Math.min(value, Math.floor(item._startStock * growthFactor)); // stop-spiral
+      return { value, wasCorrected: touched };
+    }
+
+    parkingList.forEach((item) => {
+      const cDay = correctBlock(item, "day");
+      const cEvening = correctBlock(item, "evening");
+      const cAll = correctBlock(item, "all");
+      const rawAll = cAll.value;
+      const rawDay = cDay.value;
+      const rawEvening = cEvening.value;
       const targetDay = capacityExportMinimum(rawDay);
       const targetEvening = capacityExportMinimum(rawEvening);
       const targetWeekend = capacityExportMinimum(rawAll || Math.max(rawDay, rawEvening));
       if (Math.max(targetDay, targetEvening, targetWeekend) < 2) return;
       const startsPerDay = item.starts / Math.max(1, days.length);
       const finishesPerDay = item.ends / Math.max(1, days.length);
+      const censoredCount = stockoutOn
+        ? ["day", "evening", "all"].reduce((s, bn) => s + item._facts[bn].censored.filter(Boolean).length, 0)
+        : 0;
       rows.push({
         rank: 0,
         name: item.name,
@@ -2772,6 +2864,9 @@
         targetDay,
         targetEvening,
         targetWeekend,
+        corrected: cDay.wasCorrected || cEvening.wasCorrected || cAll.wasCorrected,
+        stockoutFraction: censoredCount / (days.length * 3),
+        startStock: item._startStock,
         lat: item.lat,
         lng: item.lng,
       });
@@ -2814,6 +2909,139 @@
 
   function avg(values) {
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  }
+
+  // ── Stockout censoring correction helpers ──────────────────────────────────
+  // A day when a parking ran empty under-reports demand: rentalMaxDeficit's peak
+  // is capped by whatever stock was present, so it's a LOWER BOUND, not the truth.
+  // These helpers detect such censored days and lift their peak to an honest
+  // estimate (ladder: own clean days -> neighbours -> starts), then aggregate.
+
+  // Quantile of an ascending-sorted array (linear interpolation).
+  function quantileSorted(sortedAsc, q) {
+    if (!sortedAsc.length) return 0;
+    const idx = (sortedAsc.length - 1) * q;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    if (lo === hi) return sortedAsc[lo];
+    return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
+  }
+  function median(values) {
+    return quantileSorted([...values].sort((a, b) => a - b), 0.5);
+  }
+  // mode "q85" -> quantile q (default 0.85); anything else -> plain mean.
+  function aggregateCapacity(values, mode, q) {
+    if (!values.length) return 0;
+    if (mode === "q85") return quantileSorted([...values].sort((a, b) => a - b), q == null ? 0.85 : q);
+    return avg(values);
+  }
+
+  // Σ departures across the block's hours for one day matrix (= starts in block).
+  function blockStarts(matrix, hours) {
+    let total = 0;
+    for (const h of hours) total += (matrix[h] && matrix[h].dep) || 0;
+    return total;
+  }
+
+  // Catalog capacity index: current deployed capacity per point. This is BOTH the
+  // start-stock for stockout detection and the stop-spiral base (capacity_old).
+  function buildCatalogCapacityIndex() {
+    const byKey = new Map();
+    const points = [];
+    (state.catalogPoints || []).forEach((p) => {
+      const cap = toNumber(p.capacity);
+      if (!Number.isFinite(cap) || cap <= 0) return;
+      if (p.key) byKey.set(p.key, cap);
+      if (p.lat != null && p.lng != null) points.push({ key: p.key, lat: p.lat, lng: p.lng, capacity: cap });
+    });
+    return { byKey, points };
+  }
+
+  // Resolve a parking's start-stock. Returns { stock, fromCatalog }. fromCatalog
+  // is true only for a real catalog match (direct or nearest-within-radius) — only
+  // then does the stop-spiral apply (otherwise there is no real "old capacity").
+  function resolveStartStock(item, capIndex, radiusM, observedMax) {
+    const direct = capIndex.byKey.get(item.key);
+    if (Number.isFinite(direct)) return { stock: direct, fromCatalog: true };
+    if (item.lat != null && item.lng != null && capIndex.points.length) {
+      let best = null;
+      let bestD = Infinity;
+      for (const p of capIndex.points) {
+        const d = haversineMeters(item.lat, item.lng, p.lat, p.lng);
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      if (best && bestD <= radiusM) return { stock: best.capacity, fromCatalog: true };
+    }
+    return { stock: observedMax, fromCatalog: false };
+  }
+
+  // City-wide departures per day per hour (Σ dep over all parkings of the group).
+  // Signal for "demand was alive city-wide while this point stood empty".
+  function cityWideBlockDepartures(group, days) {
+    const map = new Map();
+    days.forEach((day) => map.set(day, Array(24).fill(0)));
+    group.parkings.forEach((item) => {
+      days.forEach((day) => {
+        const matrix = item.days.get(day);
+        if (!matrix) return;
+        const arr = map.get(day);
+        for (let h = 0; h < 24; h += 1) arr[h] += (matrix[h] && matrix[h].dep) || 0;
+      });
+    });
+    return map;
+  }
+
+  // Is this parking×day×block a stockout? Walk the block hours tracking remaining
+  // stock (seeded to startStock at block start); flag if it hit zero AND city-wide
+  // departures continued LATER in the block (demand alive while the point was empty).
+  function blockStockout(matrix, hours, startStock, cityDepArr) {
+    let remaining = startStock;
+    for (let k = 0; k < hours.length; k += 1) {
+      const h = hours[k];
+      const bucket = matrix[h] || {};
+      remaining += (bucket.arr || 0) - (bucket.dep || 0);
+      if (remaining <= 0) {
+        for (let j = k + 1; j < hours.length; j += 1) {
+          if ((cityDepArr[hours[j]] || 0) > 0) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // For each parking, the list of OTHER parkings within radiusM (O(n²), n small).
+  function neighborsWithinRadius(list, radiusM) {
+    const map = new Map();
+    list.forEach((a) => {
+      const near = [];
+      if (a.lat != null && a.lng != null) {
+        list.forEach((b) => {
+          if (b === a || b.lat == null || b.lng == null) return;
+          if (haversineMeters(a.lat, a.lng, b.lat, b.lng) <= radiusM) near.push(b);
+        });
+      }
+      map.set(a.key, near);
+    });
+    return map;
+  }
+
+  // Peak/starts ratio over CLEAN blocks of neighbours (ladder 3b). Falls back to
+  // the whole group if neighbours give no support. Requires _facts from Phase A.
+  function neighborCoef(item, blockName, neighbors, parkingList) {
+    function collectRatios(items) {
+      const ratios = [];
+      items.forEach((n) => {
+        const f = n._facts && n._facts[blockName];
+        if (!f) return;
+        f.peaks.forEach((pk, i) => {
+          if (!f.censored[i] && f.starts[i] > 0) ratios.push(pk / f.starts[i]);
+        });
+      });
+      return ratios;
+    }
+    let ratios = collectRatios(neighbors.get(item.key) || []);
+    if (!ratios.length) ratios = collectRatios(parkingList);
+    return ratios.length ? median(ratios) : null;
   }
 
   function capacityRowTargetLabel(row) {
