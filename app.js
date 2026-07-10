@@ -2816,24 +2816,29 @@
       if (!stockoutOn) {
         return { value: Math.ceil(avg(f.peaks)), wasCorrected: false };
       }
+      // Honest uncorrected capacity — identical to the OFF build. It is a FLOOR:
+      // the correction may only raise capacity, never lower it.
+      const baseVal = Math.ceil(avg(f.peaks));
       const cleanPeaks = f.peaks.filter((_, i) => !f.censored[i]);
       const ownMedian = cleanPeaks.length ? median(cleanPeaks) : null;   // 3a
       let coef = null;
       if (ownMedian == null) coef = neighborCoef(item, blockName, neighbors, parkingList); // 3b
-      let touched = false;
       const corr = f.peaks.map((obs, i) => {
         if (!f.censored[i]) return obs;
         let est;
         if (ownMedian != null) est = ownMedian;              // 3a
         else if (coef != null) est = f.starts[i] * coef;     // 3b
         else est = f.starts[i];                              // 3c
-        const lifted = Math.max(obs, est);                   // only ever raise
-        if (lifted > obs) touched = true;
-        return lifted;
+        return Math.max(obs, est);                            // only ever raise
       });
       let value = Math.ceil(aggregateCapacity(corr, aggMode, aggQ));
-      if (item._fromCatalog) value = Math.min(value, Math.floor(item._startStock * growthFactor)); // stop-spiral
-      return { value, wasCorrected: touched };
+      // Stop-spiral bounds the LIFT to growthFactor× the current catalog capacity,
+      // but must never pull below the honest baseline (that would under-provision a
+      // point whose real demand already exceeds catalog×factor). So clamp the lift,
+      // then floor at baseVal → enabling stockout can only raise, never reduce.
+      if (item._fromCatalog) value = Math.min(value, Math.floor(item._startStock * growthFactor));
+      value = Math.max(value, baseVal);
+      return { value, wasCorrected: value > baseVal };
     }
 
     parkingList.forEach((item) => {
