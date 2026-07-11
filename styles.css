@@ -2306,9 +2306,21 @@ button:disabled,
 .preview-table th.l,.preview-table td.l{text-align:left}
 .preview-table thead th{position:sticky;top:0;background:var(--panel-soft);color:var(--muted);font-weight:800;cursor:default}
 .preview-table td.cap{font-weight:900;color:var(--brand)}
+/* With/without stockout comparison columns. Active (goes to monitor) = .cap; the
+   other variant = .cap-alt (muted). .up marks a lifted (corrected > baseline) value. */
+.preview-table td.cap-col{text-align:right;font-variant-numeric:tabular-nums}
+.preview-table td.cap-alt{color:var(--muted);font-weight:600}
+.preview-table td.cap-col.up{color:var(--green);font-weight:900}
+.preview-table th.th-active{color:var(--brand);background:rgba(0,168,132,.10)}
 .preview-table td.neg{color:var(--red)} .preview-table td.pos{color:var(--green)}
 .preview-table td.blocks{color:var(--muted);font-size:11.5px}
 .preview-table tbody tr:hover{background:rgba(0,168,132,.06)}
+/* Drag-to-resize columns: fixed layout honours per-column widths; clip overflow with ellipsis.
+   thead th is already position:sticky, which anchors the absolutely-positioned handle. */
+.preview-table.resizable{table-layout:fixed}
+.preview-table.resizable th,.preview-table.resizable td{overflow:hidden;text-overflow:ellipsis}
+.preview-table .col-resizer{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;user-select:none;z-index:3}
+.preview-table .col-resizer:hover{background:var(--brand);opacity:.5}
 .ztype{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800}
 .ztype.src{background:rgba(194,65,12,.14);color:var(--red)}
 .ztype.acc{background:rgba(21,128,61,.14);color:var(--green)}
